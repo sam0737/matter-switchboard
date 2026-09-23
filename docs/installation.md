@@ -48,14 +48,16 @@ can start.
 ## First-time setup
 
 `matter-switchboard init` creates directories, generates the administrator
-credential, and writes the initial configuration. The credential is shown once
-and is saved in a user-only file. The administrator credential is not a user
+credential, and writes the initial configuration. The credential is saved in a
+user-only file. The administrator credential is not a user
 API key and cannot be used by remote programs to control outlets.
 
 Configure the LAN bind address and HTTP port before starting the service. The
-default user API port is `8090`; the administrator listener binds to loopback.
-The service reports its effective URLs at startup. A static LAN address or DHCP
-reservation is recommended for callers that use direct IP access.
+default user API binds to `0.0.0.0:8090` (all IPv4 interfaces); the
+administrator listener binds only to `127.0.0.1:8091`. Restrict the user API
+with a host firewall or bind it to a specific LAN address. The service reports
+its effective URLs at startup. A static LAN address or DHCP reservation is
+recommended for callers that use direct IP access.
 
 ## Configuration and reconfiguration
 
@@ -72,7 +74,7 @@ Secrets are stored separately from non-secret configuration.
 
 Use `matter-switchboard config show` to inspect non-secret settings and
 `matter-switchboard config set <name> <value>` to update a setting. Restart the
-service after changing listener or Matter network-interface settings. The
+service after changing listener settings. The
 effective configuration and validation errors are printed at startup.
 
 Re-run `matter-switchboard init` only to create missing files. It does not
@@ -85,13 +87,13 @@ and device inventory.
 Paths follow the XDG Base Directory convention and can be overridden with the
 standard environment variables:
 
-| Data | Default path | Purpose |
-|---|---|---|
-| Configuration | `~/.config/matter-switchboard/` | Listener and service configuration, administrator credential |
-| Matter data | `~/.local/share/matter-switchboard/` | Fabric keys, controller state, commissioned-node records |
-| Mock device data | `~/.local/share/matter-switchboard/` | Mock inventory and persisted socket power states |
-| Runtime state | `~/.local/state/matter-switchboard/` | Logs, audit records, transient state |
-| CLI executable | `~/.local/bin/matter-switchboard` | User-local command |
+| Data             | Default path                         | Purpose                                                      |
+| ---------------- | ------------------------------------ | ------------------------------------------------------------ |
+| Configuration    | `~/.config/matter-switchboard/`      | Listener and service configuration, administrator credential |
+| Matter data      | `~/.local/share/matter-switchboard/` | Fabric keys, controller state, commissioned-node records     |
+| Mock device data | `~/.local/share/matter-switchboard/` | Mock inventory and persisted socket power states             |
+| Runtime state    | `~/.local/state/matter-switchboard/` | Logs, audit records, transient state                         |
+| CLI executable   | `~/.local/bin/matter-switchboard`    | User-local command                                           |
 
 Directories are mode `0700`; secret and state files are mode `0600`, owned by
 the local user. Matter data contains private credentials that permit control of

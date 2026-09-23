@@ -4,6 +4,7 @@
 
 - Node.js 22 or newer and npm.
 - Git for source checkout.
+- GNU `flock` (provided by util-linux) for the single-instance server lock.
 - A Linux host with IPv6 and mDNS/multicast connectivity for Matter end-to-end
   commissioning and control tests.
 
@@ -45,10 +46,12 @@ Unit tests cover API validation, authorization, key creation and revocation,
 rate limits, storage updates, and command scheduling. Matter transport and
 controller behavior are mocked for unit tests.
 
-End-to-end tests run the service and a Matter test device/controller on an
-isolated test network. They cover commissioning, persistence across restart,
-device and endpoint listing, reachability, outlet state reads, on/off commands,
-and fabric removal. E2E tests never target production devices by default.
+End-to-end tests start the service as a child process and add a persistent mock
+strip through the production CLI. They cover API authentication and rate limits,
+device and endpoint listing, outlet state reads, on/off commands, persistence
+across restart, and single-instance locking. They do not commission real Matter
+hardware; a physical-device integration test can be run separately on an
+isolated Matter network.
 
 ## Package for user-local installation
 

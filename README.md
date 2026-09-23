@@ -28,7 +28,8 @@ matter-switchboard server
 ```
 
 `init` creates user-owned configuration, storage, and an administrator
-credential. The server prints its LAN URL and the administrator instructions.
+credential file. The server prints its API and documentation URLs. The local
+CLI reads the administrator credential from that file automatically.
 Leave the server running and open a second terminal for management commands.
 From an existing Matter administrator such as Home Assistant, open a sharing
 window for a strip. Then run `matter-switchboard device commission` and enter
@@ -62,9 +63,3 @@ For full CLI commands, see [Administration](docs/usage.md#administration).
 - [Usage](docs/usage.md) — Matter administration and HTTP control examples.
 - [Open decisions](docs/open_decisions.md) — questions to resolve before
   implementation is considered complete.
-
-## Project status
-
-This repository documents the product specification. Commands and interfaces
-described here define the intended completed product; implementation details
-may evolve while preserving the documented behavior.

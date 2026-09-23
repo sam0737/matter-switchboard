@@ -22,10 +22,10 @@ on one LAN, with one Matter fabric owned by the Switchboard controller.
 
 The service keeps the API and Matter controller in one process. It exposes two
 HTTP listeners: an administrator listener on loopback and a user API listener
-on the configured LAN address. They share service state and OpenAPI route
-definitions. Matter commands are serialized per endpoint to avoid overlapping
-operations on one outlet. Matter fabric credentials remain in controller
-storage and are never returned through the user API.
+on the configured LAN address. They share service state. Matter commands are
+serialized per endpoint to avoid overlapping operations on one outlet. Matter
+fabric credentials remain in controller storage and are never returned through
+the user API.
 
 ### Single-instance service lifecycle
 
@@ -84,10 +84,11 @@ process:
 2. **User API** — device and endpoint inventory, state reads, and outlet power
    commands. It listens on the configured LAN address for remote programs.
 
-Both use the same OpenAPI document. Admin routes require an administrator
-credential; user routes require a scoped API key. Swagger UI and the OpenAPI
-document are readable without authentication on the user LAN listener, but
-operations still enforce authentication and authorization.
+Each listener publishes its own OpenAPI document containing only that
+listener's routes. Admin routes require an administrator credential; user
+routes require a scoped API key. Swagger UI and the OpenAPI document are
+readable without authentication on either listener, but operations still
+enforce authentication and authorization.
 
 The user API uses stable device slugs for URLs. Each slug maps to an internal
 Matter Node ID; endpoint IDs identify individual outlets. Slugs can be renamed
@@ -99,7 +100,7 @@ without changing Matter identity.
 
 Keys are generated with cryptographically secure randomness. A key is displayed
 once at creation; only a verifier and metadata are stored. Each key has a name,
-creation time, optional expiry, scopes, and optional device allowlist. Supported
+creation time, scopes, and optional device allowlist. Supported
 scopes are `read` and `control`. Key management is available only to an
 administrator.
 
@@ -139,13 +140,14 @@ not defined yet; see [Open decisions](open_decisions.md#outlet-command-rate-limi
 
 ## OpenAPI and Swagger UI
 
-- OpenAPI 3 document: `GET /openapi.json`
-- Swagger UI: `GET /docs`
+- OpenAPI 3 document: `GET /openapi.json` on each listener
+- Swagger UI: `GET /docs` on each listener
 
-The OpenAPI document describes admin and user routes, schemas, authentication,
-rate-limit responses, and optional telemetry. Swagger is useful for discovery
-and manual development, not as an authorization mechanism. It is served by the
-local service and is not published to an external documentation host.
+The administrator OpenAPI document describes management routes; the user
+OpenAPI document describes device and outlet routes. Each documents its bearer
+authentication requirement. Swagger is useful for discovery and manual
+development, not as an authorization mechanism. It is served by the local
+service and is not published to an external documentation host.
 
 ## Security boundaries
 
