@@ -89,6 +89,7 @@ standard environment variables:
 |---|---|---|
 | Configuration | `~/.config/matter-switchboard/` | Listener and service configuration, administrator credential |
 | Matter data | `~/.local/share/matter-switchboard/` | Fabric keys, controller state, commissioned-node records |
+| Mock device data | `~/.local/share/matter-switchboard/` | Mock inventory and persisted socket power states |
 | Runtime state | `~/.local/state/matter-switchboard/` | Logs, audit records, transient state |
 | CLI executable | `~/.local/bin/matter-switchboard` | User-local command |
 
@@ -98,8 +99,9 @@ the Switchboard fabric. Back it up only to a protected location. Losing that
 data loses the controller's fabric identity; deleting it does not remove the
 fabric from devices.
 
-API-key verifiers, key metadata, device slugs, and inventory are persisted in
-local files with atomic replacement. No database server is used.
+API-key verifiers, key metadata, device slugs, inventory, and mock socket power
+states are persisted in local files with atomic replacement. No database server
+is used.
 
 ## API key lifecycle
 

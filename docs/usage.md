@@ -46,7 +46,28 @@ matter-switchboard endpoint list patio-strip
 
 The inventory includes slug, Matter Node ID, reachability, last successful
 contact, and endpoint IDs/types reported by the device. Endpoint IDs are
-device-specific; verify the outlet mapping before operating a new strip.
+device-specific; verify the outlet mapping before operating a new strip. Mock
+devices are included and marked with `kind: mock`; they have endpoints 1 and 2
+for their two sockets and do not have a Matter Node ID.
+
+### Add and remove a mock strip
+
+Mock strips are available in production as well as during development and
+testing. They use the ordinary administrator CLI and do not need a physical
+device or Matter commissioning window:
+
+```sh
+matter-switchboard mock add demo-strip
+matter-switchboard mock list
+matter-switchboard mock remove demo-strip
+```
+
+The mock has two socket endpoints, numbered 1 and 2. Their power states are
+saved to disk and restored after a Switchboard restart. Removing a mock deletes
+its inventory and saved state; it does not affect Matter fabrics or physical
+devices. Mock outlets use the same control and power-state endpoints as real
+outlets, so API clients can use either kind of device without changing their
+request format.
 
 ### Ping/reachability
 
@@ -137,7 +158,8 @@ GET /v1/devices/{slug}/endpoints
 
 The response includes stable slugs, Matter node IDs, endpoint IDs, endpoint
 types, availability, and `lastSeen`. Power-strip outlets are represented as
-endpoints under one device.
+endpoints under one device. Mock devices are marked `kind: mock`, have no
+Matter Node ID, and expose socket endpoints 1 and 2.
 
 ### Turn an outlet on or off
 
@@ -172,9 +194,10 @@ GET /v1/devices/{slug}/endpoints/{endpointId}/state
 The response reports the outlet power state and, when supported and exposed by
 the device, current, voltage, and active power/wattage. Unsupported readings are
 returned as `null` with a capability/status indicator; they are never presented
-as zero. Each value includes or shares an `observedAt` timestamp so callers can
-distinguish fresh data from cached data. A Matter write may produce a new power
-state before the device reports electrical measurements.
+as zero. Mock sockets persist power state and return unsupported electrical
+measurements as `null`. Each value includes or shares an `observedAt` timestamp
+so callers can distinguish fresh data from cached data. A Matter write may
+produce a new power state before the device reports electrical measurements.
 
 ### Reachability
 

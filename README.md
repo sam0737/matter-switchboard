@@ -3,7 +3,9 @@
 Matter Switchboard is a local-user Matter controller and HTTP API for managing
 and controlling multiple Matter power strips on one LAN. It provides a small,
 programmable interface for remote programs while keeping Matter fabric
-credentials and device administration on one server.
+credentials and device administration on one server. It also supports
+persistent mock strips, each with two controllable sockets, for integration
+work without a physical device.
 
 The service runs as an ordinary operating-system user. It does not require a
 root installation, a database server, MQTT broker, or cloud account. Matter

@@ -54,6 +54,21 @@ multi-admin sharing. The strip is already provisioned onto Wi-Fi by another
 commissioner. Switchboard uses the setup code from a temporary commissioning
 window and does not provision Wi-Fi credentials.
 
+### Mock devices
+
+Mock strips are first-class inventory devices and can be added or removed with
+the administrator CLI at any time, including in production. They are not
+Matter nodes and require no commissioning or network discovery. Each mock strip
+has exactly two socket endpoints. It implements the same outlet control and
+state API shape as a real strip so programs can exercise their normal API calls.
+
+Mock device identity and socket power state are persisted in the local
+Switchboard data directory. Power state survives service restarts. A mock
+device is labeled as mock in inventory and API responses; its simulated state
+must not be interpreted as proof that a physical outlet changed. It does not
+report measured current, voltage, or wattage unless a future specification adds
+explicit simulation for those readings.
+
 Matter requires local IPv6 and mDNS/multicast for discovery. The HTTP API can
 use IPv4 direct-IP access independently of Matter's local discovery. The host
 must be on a network where Matter traffic can reach the strips.
