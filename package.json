@@ -1,0 +1,45 @@
+{
+  "name": "matter-switchboard",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A local Matter controller and HTTP power-switch API",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "bin": {
+    "matter-switchboard": "dist/cli.js"
+  },
+  "files": [
+    "dist",
+    "README.md",
+    "docs"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "start": "node dist/cli.js server",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "test": "npm run test:unit && npm run test:e2e",
+    "test:unit": "npm run build && node --test dist/test/unit/*.test.js",
+    "test:e2e": "npm run build && node --test dist/test/e2e/*.test.js"
+  },
+  "dependencies": {
+    "@fastify/swagger": "^9.5.1",
+    "@fastify/swagger-ui": "^5.2.3",
+    "@matter/main": "0.17.9",
+    "@project-chip/matter.js": "0.17.9",
+    "commander": "^14.0.0",
+    "fastify": "^5.3.3"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.24.0",
+    "@types/node": "^22.14.0",
+    "eslint": "^9.24.0",
+    "globals": "^16.0.0",
+    "prettier": "^3.5.3",
+    "typescript": "^5.8.3",
+    "typescript-eslint": "^8.29.1"
+  }
+}
