@@ -30,6 +30,8 @@ const adminInfo = {
 
 Send \`Authorization: Bearer <administrator-credential>\`. \`matter-switchboard init\` creates that credential in the invoking user's configuration directory. An API key is not accepted here.
 
+This listener also serves the \`/v1\` device and outlet routes. The CLI and TUI call those on loopback with the administrator credential. Remote programs should keep using the user API.
+
 Commission a strip that is already on Wi-Fi: open a Matter multi-admin sharing window, then \`POST /admin/devices/commission\` with the temporary setup code and a slug. The setup code expires with that window and is not the original pairing code.
 
 \`POST /admin/mocks\` adds a two-socket strip that persists power state and does not join a Matter fabric. Remove it with \`DELETE /admin/mocks/{slug}\`. For a commissioned device, decommission-self asks the device to drop this controller, and forget-local drops only the local pairing.
@@ -71,6 +73,11 @@ const adminTags = [
   {
     name: "devices",
     description: "Commissioned and mock strips, including Matter identity and saved outlet state.",
+  },
+  {
+    name: "endpoints",
+    description:
+      "Outlets on one strip. The CLI and TUI use these /v1 routes on this loopback listener.",
   },
   {
     name: "mocks",

@@ -52,6 +52,12 @@ const adminPaths = [
   "/admin/mocks",
   "/admin/mocks/{slug}",
   "/health",
+  "/v1/devices",
+  "/v1/devices/{slug}",
+  "/v1/devices/{slug}/availability",
+  "/v1/devices/{slug}/endpoints",
+  "/v1/devices/{slug}/endpoints/{endpointId}/power",
+  "/v1/devices/{slug}/endpoints/{endpointId}/state",
 ];
 
 interface OpenApiDocument {
@@ -227,20 +233,18 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
     await readFile(path.join(env.XDG_CONFIG_HOME!, "matter-switchboard", "admin-token"), "utf8")
   ).trim();
   const adminBase = `http://127.0.0.1:${config.adminPort}`;
-  const adminHeaders = { Authorization: `Bearer ${adminToken}` };
+  const adminHeaders = {
+    Authorization: `Bearer ${adminToken}`,
+    "Content-Type": "application/json",
+  };
   const adminDevices = await fetch(`${adminBase}/v1/devices`, { headers: adminHeaders });
   assert.equal(adminDevices.status, 200, await adminDevices.text());
   const adminPower = await fetch(`${adminBase}/v1/devices/test-strip/endpoints/1/power`, {
     method: "PUT",
-    headers: { ...adminHeaders, "Content-Type": "application/json" },
+    headers: adminHeaders,
     body: JSON.stringify({ on: true }),
   });
   assert.equal(adminPower.status, 200, await adminPower.text());
-  const adminOpenapi = await fetch(`${adminBase}/openapi.json`);
-  assert.equal(adminOpenapi.status, 200);
-  const adminSpec = (await adminOpenapi.json()) as { paths: Record<string, unknown> };
-  assert.ok(adminSpec.paths["/v1/devices/{slug}/endpoints/{endpointId}/power"]);
-  assert.ok(adminSpec.paths["/admin/devices"]);
 
   const makeKey = command(env, "key", "create", "e2e", "control", "test-strip");
   assert.equal((await makeKey.exited).code, 0, makeKey.output());
@@ -321,14 +325,6 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
   assert.equal(specification.paths["/admin/devices/commission"], undefined);
   assert.equal((await fetch(`${base}/docs`, { headers })).status, 200);
 
-  const adminToken = (
-    await readFile(path.join(env.XDG_CONFIG_HOME!, "matter-switchboard", "admin-token"), "utf8")
-  ).trim();
-  const adminBase = `http://127.0.0.1:${config.adminPort}`;
-  const adminHeaders = {
-    Authorization: `Bearer ${adminToken}`,
-    "Content-Type": "application/json",
-  };
   const adminSpec = (await (await fetch(`${adminBase}/openapi.json`)).json()) as OpenApiDocument;
   assertOpenApi(adminSpec, "admin");
   const created = await fetch(`${adminBase}/admin/mocks`, {
