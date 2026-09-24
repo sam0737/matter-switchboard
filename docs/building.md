@@ -34,6 +34,21 @@ ESLint checks TypeScript and can automatically fix supported issues with
 `--fix`. Prettier applies consistent formatting. Build output is generated
 under `dist/` and is not edited by hand.
 
+## Run locally
+
+After `npm run build`, run the compiled CLI from the checkout:
+
+```sh
+npx matter-switchboard init
+npx matter-switchboard server
+# In another session, from the same directory
+npx matter-switchboard
+```
+
+`npx` uses the local `dist/cli.js` bin. `init` creates configuration if it is
+missing. Commissioning, API keys, and Swagger are covered in the
+[README](../README.md#quick-start).
+
 ## Tests
 
 ```sh

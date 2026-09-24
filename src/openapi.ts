@@ -32,7 +32,7 @@ Send \`Authorization: Bearer <administrator-credential>\`. \`matter-switchboard 
 
 This listener also serves the \`/v1\` device and outlet routes. The CLI and TUI call those on loopback with the administrator credential. Remote programs should keep using the user API.
 
-Commission a strip that is already on Wi-Fi: open a Matter multi-admin sharing window, then \`POST /admin/devices/commission\` with the temporary setup code and a slug. The setup code expires with that window and is not the original pairing code.
+Commission a strip that is already on Wi-Fi. Switchboard does not use Bluetooth and does not provision Wi-Fi. Commission the device onto Wi-Fi with a phone app, open a Matter multi-admin sharing window, then \`POST /admin/devices/commission\` with the temporary setup code and a slug. The setup code expires with that window and is not the original pairing code.
 
 To let another administrator join a strip this server already controls, \`POST /admin/devices/{slug}/share\`. The response is a one-time setup code for that window. It is not stored.
 

@@ -51,11 +51,13 @@ manager may restart the process after a crash; the OS-released lock allows the
 restart to acquire it normally.
 
 Matter strips are commissioned onto the server's fabric through Matter
-multi-admin sharing. The strip is already provisioned onto Wi-Fi by another
-commissioner. Switchboard uses the setup code from a temporary commissioning
-window and does not provision Wi-Fi credentials. A strip Switchboard already
-administers can open the same kind of window, so another administrator can
-join it. That setup code is returned once and is not stored.
+multi-admin sharing. Switchboard does not use Bluetooth and does not provision
+Wi-Fi. A phone app such as the
+[Google Home Mobile SDK sample app for Matter](https://github.com/sam0737/sample-apps-for-matter-android)
+puts the strip on Wi-Fi and onto that app's fabric, then opens a temporary
+commissioning window. Switchboard uses that setup code. A strip Switchboard
+already administers can open the same kind of window, so another administrator
+can join it. That setup code is returned once and is not stored.
 
 ### Mock devices
 

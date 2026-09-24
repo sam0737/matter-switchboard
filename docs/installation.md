@@ -3,31 +3,137 @@
 Matter Switchboard is installed and operated by a regular local user. It does
 not install files under `/usr`, require `sudo`, or run as root.
 
-## User-local installation
+## Install and run with npx
 
-From a source checkout:
+Requirements: Node.js 22 or newer and npm.
 
 ```sh
-npm ci
-npm run build
-npm install --global --prefix "$HOME/.local" .
+npx matter-switchboard init
+npx matter-switchboard server
+# In another session
+npx matter-switchboard
+```
+
+`init` is once. It creates user-owned configuration, storage, and an
+administrator credential file. Leave the server running. The second session
+opens the dashboard; press `c` to commission devices and create API keys.
+Installation and data directories are created with the invoking user's
+ownership. Do not run two controller instances against the same storage at
+once.
+
+## Install locally
+
+```sh
+npm install --global --prefix "$HOME/.local" matter-switchboard
 export PATH="$HOME/.local/bin:$PATH"
 ```
 
-Add `$HOME/.local/bin` to the user's shell `PATH` permanently. The CLI can also
-be run directly from the checkout during development. Installation and data
-directories are created with the invoking user's ownership.
+Add `$HOME/.local/bin` to the user's shell `PATH` permanently. After that,
+`matter-switchboard` works without `npx`. Building from a source checkout is
+in [Building](building.md).
 
-Start the service in a terminal:
+## Swagger and the user API
+
+The server prints documentation URLs at startup. Open them at the host's LAN
+address. Default `apiHost` is `0.0.0.0`, which is a bind address; use the LAN
+IP in the browser.
+
+- Swagger UI: `http://<LAN-IP>:8090/docs`
+- OpenAPI: `http://<LAN-IP>:8090/openapi.json`
+
+Default port is 8090. `/docs`, `/openapi.json`, and `/health` are readable
+without a key. Device and outlet calls still need
+`Authorization: Bearer <api-key>`.
+
+## First-time setup
+
+`matter-switchboard init` creates directories, generates the administrator
+credential, and writes the initial configuration. The credential is saved in a
+user-only file. The administrator credential is not a user
+API key and cannot be used by remote programs to control outlets.
+
+Configure the LAN bind address and HTTP port before starting the service. The
+default user API binds to `0.0.0.0:8090` (all IPv4 interfaces); the
+administrator listener binds only to `127.0.0.1:8091`. Restrict the user API
+with a host firewall or bind it to a specific LAN address. The service reports
+its effective URLs at startup. A static LAN address or DHCP reservation is
+recommended for callers that use direct IP access.
+
+## Run as a user systemd service
+
+The service can run as a `systemd --user` unit so it starts at boot, stays up
+after logout, and restarts after a crash. It must retain the same user and
+storage directory across restarts.
+
+Install the command under the home directory first, then run init once in a
+normal shell:
 
 ```sh
+npm install --global --prefix "$HOME/.local" matter-switchboard
+export PATH="$HOME/.local/bin:$PATH"
 matter-switchboard init
-matter-switchboard server
 ```
 
-The service can optionally run as a `systemd --user` service. It must retain
-the same user and storage directory across restarts. Do not run two controller
-instances against the same storage at once.
+Stop any manual `matter-switchboard server` before enabling the unit. A second
+start exits non-zero because of the single-instance lock, and a restart policy
+would keep retrying it.
+
+The installed CLI starts with `#!/usr/bin/env node`. A user manager does not
+load nvm or the login shell's `PATH`, so run Node by its absolute path:
+
+```sh
+command -v node
+node --version
+```
+
+Create `~/.config/systemd/user/matter-switchboard.service`. Put that path in
+`ExecStart` before the CLI:
+
+```ini
+[Unit]
+Description=Matter Switchboard
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+ExecStart=/absolute/path/from/command-v-node %h/.local/bin/matter-switchboard server
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=default.target
+```
+
+`%h` is the user's home directory. Then:
+
+```sh
+loginctl enable-linger "$USER"
+systemctl --user daemon-reload
+systemctl --user enable --now matter-switchboard.service
+```
+
+Linger lets the user service start at boot and keep running after logout.
+`loginctl enable-linger` may require privileges. `enable` ties the unit to
+`default.target`, so it starts when that user's systemd starts.
+`Restart=on-failure` starts the process again after a crash or non-zero exit.
+`systemctl --user stop` still stops it. The OS releases the server lock when
+the process dies, so the restarted process can take it. Do not delete the lock
+file.
+
+Logs are on the user journal. `journalctl -u` without `--user` is the system
+manager and will show nothing:
+
+```sh
+journalctl --user -u matter-switchboard.service -e
+journalctl --user -u matter-switchboard.service -f
+```
+
+After editing the unit, reload and restart:
+
+```sh
+systemctl --user daemon-reload
+systemctl --user restart matter-switchboard.service
+```
 
 ### Single-instance lock
 
@@ -45,19 +151,20 @@ do not delete it as a recovery step. The lock held by the process, rather than
 the file's presence or its recorded PID, determines whether another instance
 can start.
 
-## First-time setup
+## Source checkout
 
-`matter-switchboard init` creates directories, generates the administrator
-credential, and writes the initial configuration. The credential is saved in a
-user-only file. The administrator credential is not a user
-API key and cannot be used by remote programs to control outlets.
+From a source checkout, compile and run with `npx` against `dist/` as in
+[Building](building.md). To install the compiled package under the home
+directory:
 
-Configure the LAN bind address and HTTP port before starting the service. The
-default user API binds to `0.0.0.0:8090` (all IPv4 interfaces); the
-administrator listener binds only to `127.0.0.1:8091`. Restrict the user API
-with a host firewall or bind it to a specific LAN address. The service reports
-its effective URLs at startup. A static LAN address or DHCP reservation is
-recommended for callers that use direct IP access.
+```sh
+npm ci
+npm run build
+npm install --global --prefix "$HOME/.local" .
+export PATH="$HOME/.local/bin:$PATH"
+```
+
+Add `$HOME/.local/bin` to the user's shell `PATH` permanently.
 
 ## Configuration and reconfiguration
 
@@ -108,7 +215,7 @@ standard environment variables:
 | Matter data      | `~/.local/share/matter-switchboard/` | Fabric keys, controller state, commissioned-node records     |
 | Mock device data | `~/.local/share/matter-switchboard/` | Mock inventory and persisted socket power states             |
 | Runtime state    | `~/.local/state/matter-switchboard/` | Logs, audit records, transient state                         |
-| CLI executable   | `~/.local/bin/matter-switchboard`    | User-local command                                           |
+| CLI executable   | `~/.local/bin/matter-switchboard`    | Optional user-local command after a source install           |
 
 Directories are mode `0700`; secret and state files are mode `0600`, owned by
 the local user. Matter data contains private credentials that permit control of
@@ -122,7 +229,8 @@ is used.
 
 ## API key lifecycle
 
-Create one scoped key per remote program:
+Create one scoped key per remote program, from the dashboard (`c`, then API
+keys) or the CLI:
 
 ```sh
 matter-switchboard key create irrigation control patio-strip
