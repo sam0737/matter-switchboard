@@ -1,6 +1,4 @@
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import swagger from "@fastify/swagger";
-import swaggerUi from "@fastify/swagger-ui";
 import { randomBytes } from "node:crypto";
 import { loadConfig, readAdminToken, saveConfig } from "./config.js";
 import { fabricRemovalConfirmation } from "./confirm.js";
@@ -10,6 +8,12 @@ import { Inventory, validateSlug } from "./inventory.js";
 import { SlidingWindowLimiter } from "./limiter.js";
 import { MatterControllerAdapter } from "./matter.js";
 import type { ApiKeyRecord, DeviceRecord } from "./model.js";
+import {
+  createAdminSchemas,
+  createUserSchemas,
+  healthSchema,
+  registerDocumentation,
+} from "./openapi.js";
 import { ensureDirectories } from "./paths.js";
 import { bearer, findApiKey, matches, verifier } from "./security.js";
 import { StateStore } from "./storage.js";
@@ -94,18 +98,8 @@ async function buildApp(
     return reply.code(401).send({ error: "unauthorized", message: "Valid API key required" });
   });
 
-  await app.register(swagger, {
-    openapi: {
-      openapi: "3.0.3",
-      info: { title: "Matter Switchboard API", version: "0.1.0" },
-      components: {
-        securitySchemes: { bearerAuth: { type: "http", scheme: "bearer" } },
-      },
-    },
-  });
-  await app.register(swaggerUi, { routePrefix: "/docs", uiConfig: { docExpansion: "list" } });
-  app.get("/openapi.json", async () => app.swagger());
-  app.get("/health", async () => ({ status: "ok" }));
+  await registerDocumentation(app, audience);
+  app.get("/health", { schema: healthSchema() }, async () => ({ status: "ok" }));
 
   if (audience === "admin") {
     registerAdminRoutes(app, context);
@@ -145,32 +139,19 @@ function requireScope(request: FastifyRequest, scope: "read" | "control"): void 
 }
 
 function registerUserRoutes(app: FastifyInstance, context: ServiceContext): void {
-  const slugParams = {
-    type: "object",
-    required: ["slug"],
-    properties: { slug: { type: "string" } },
-  } as const;
-  const endpointParams = {
-    type: "object",
-    required: ["slug", "endpointId"],
-    properties: { slug: { type: "string" }, endpointId: { type: "string" } },
-  } as const;
-  app.get(
-    "/v1/devices",
-    { schema: { tags: ["devices"], security: [{ bearerAuth: [] }] } },
-    async (request) => {
-      requireScope(request, "read");
-      const key = request.switchboardKey!;
-      return context.inventory
-        .list()
-        .filter((device) => !key.devices || key.devices.includes(device.id))
-        .map((device) => ({ ...Inventory.publicDevice(device), kind: device.kind }));
-    },
-  );
+  const schemas = createUserSchemas();
+  app.get("/v1/devices", { schema: schemas.listDevices }, async (request) => {
+    requireScope(request, "read");
+    const key = request.switchboardKey!;
+    return context.inventory
+      .list()
+      .filter((device) => !key.devices || key.devices.includes(device.id))
+      .map((device) => ({ ...Inventory.publicDevice(device), kind: device.kind }));
+  });
 
   app.get<{ Params: { slug: string } }>(
     "/v1/devices/:slug",
-    { schema: { tags: ["devices"], security: [{ bearerAuth: [] }], params: slugParams } },
+    { schema: schemas.getDevice },
     async (request) => {
       requireScope(request, "read");
       const device = context.inventory.get(request.params.slug);
@@ -181,7 +162,7 @@ function registerUserRoutes(app: FastifyInstance, context: ServiceContext): void
 
   app.get<{ Params: { slug: string } }>(
     "/v1/devices/:slug/endpoints",
-    { schema: { tags: ["endpoints"], security: [{ bearerAuth: [] }], params: slugParams } },
+    { schema: schemas.listEndpoints },
     async (request) => {
       requireScope(request, "read");
       const device = context.inventory.get(request.params.slug);
@@ -200,7 +181,7 @@ function registerUserRoutes(app: FastifyInstance, context: ServiceContext): void
 
   app.get<{ Params: { slug: string; endpointId: string } }>(
     "/v1/devices/:slug/endpoints/:endpointId/state",
-    { schema: { tags: ["endpoints"], security: [{ bearerAuth: [] }], params: endpointParams } },
+    { schema: schemas.getEndpointState },
     async (request) => {
       requireScope(request, "read");
       const device = context.inventory.get(request.params.slug);
@@ -219,19 +200,7 @@ function registerUserRoutes(app: FastifyInstance, context: ServiceContext): void
 
   app.put<{ Params: { slug: string; endpointId: string }; Body: { on: boolean } }>(
     "/v1/devices/:slug/endpoints/:endpointId/power",
-    {
-      schema: {
-        tags: ["endpoints"],
-        security: [{ bearerAuth: [] }],
-        params: endpointParams,
-        body: {
-          type: "object",
-          required: ["on"],
-          additionalProperties: false,
-          properties: { on: { type: "boolean" } },
-        },
-      },
-    },
+    { schema: schemas.setPower },
     async (request) => {
       requireScope(request, "control");
       const device = context.inventory.get(request.params.slug);
@@ -255,7 +224,7 @@ function registerUserRoutes(app: FastifyInstance, context: ServiceContext): void
 
   app.get<{ Params: { slug: string } }>(
     "/v1/devices/:slug/availability",
-    { schema: { tags: ["devices"], security: [{ bearerAuth: [] }], params: slugParams } },
+    { schema: schemas.getAvailability },
     async (request) => {
       requireScope(request, "read");
       const device = context.inventory.get(request.params.slug);
@@ -285,33 +254,19 @@ function parseEndpointId(value: string): number {
 }
 
 function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): void {
-  app.get(
-    "/admin/devices",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
-    async () => context.inventory.list(),
-  );
+  const schemas = createAdminSchemas();
+  app.get("/admin/devices", { schema: schemas.listDevices }, async () => context.inventory.list());
 
   app.post<{ Body: { slug: string } }>(
     "/admin/mocks",
-    {
-      schema: {
-        tags: ["admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["slug"],
-          additionalProperties: false,
-          properties: { slug: { type: "string" } },
-        },
-      },
-    },
+    { schema: schemas.addMock },
     async (request, reply) =>
       reply.code(201).send(await context.inventory.addMock(request.body.slug)),
   );
 
   app.delete<{ Params: { slug: string } }>(
     "/admin/mocks/:slug",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.removeMock },
     async (request, reply) => {
       await context.inventory.removeMock(request.params.slug);
       return reply.code(204).send();
@@ -320,22 +275,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.post<{ Body: { setupCode: string; slug: string; allowAttestationBypass?: boolean } }>(
     "/admin/devices/commission",
-    {
-      schema: {
-        tags: ["admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["setupCode", "slug"],
-          additionalProperties: false,
-          properties: {
-            setupCode: { type: "string" },
-            slug: { type: "string" },
-            allowAttestationBypass: { type: "boolean" },
-          },
-        },
-      },
-    },
+    { schema: schemas.commission },
     async (request, reply) => {
       validateSlug(request.body.slug);
       if (context.inventory.list().some((device) => device.slug === request.body.slug)) {
@@ -359,24 +299,13 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.post<{ Params: { slug: string }; Body: { slug: string } }>(
     "/admin/devices/:slug/rename",
-    {
-      schema: {
-        tags: ["admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["slug"],
-          additionalProperties: false,
-          properties: { slug: { type: "string" } },
-        },
-      },
-    },
+    { schema: schemas.rename },
     async (request) => context.inventory.rename(request.params.slug, request.body.slug),
   );
 
   app.post<{ Params: { slug: string } }>(
     "/admin/devices/:slug/ping",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.ping },
     async (request) => {
       const device = context.inventory.get(request.params.slug);
       if (device.kind === "mock")
@@ -398,7 +327,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.delete<{ Params: { slug: string } }>(
     "/admin/devices/:slug/decommission-self",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.decommissionSelf },
     async (request, reply) => {
       const device = context.inventory.get(request.params.slug);
       if (device.kind !== "matter")
@@ -411,7 +340,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.delete<{ Params: { slug: string } }>(
     "/admin/devices/:slug/forget-local",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.forgetLocal },
     async (request, reply) => {
       const device = context.inventory.get(request.params.slug);
       if (device.kind !== "matter")
@@ -424,7 +353,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.get<{ Params: { slug: string } }>(
     "/admin/devices/:slug/fabrics",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.listFabrics },
     async (request) => {
       const device = context.inventory.get(request.params.slug);
       if (device.kind !== "matter")
@@ -435,18 +364,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.delete<{ Params: { slug: string; fabricIndex: string }; Body: { confirmLabel: string } }>(
     "/admin/devices/:slug/fabrics/:fabricIndex",
-    {
-      schema: {
-        tags: ["admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["confirmLabel"],
-          additionalProperties: false,
-          properties: { confirmLabel: { type: "string" } },
-        },
-      },
-    },
+    { schema: schemas.removeFabric },
     async (request, reply) => {
       const device = context.inventory.get(request.params.slug);
       if (device.kind !== "matter")
@@ -472,22 +390,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
 
   app.post<{ Body: { name: string; scope: "read" | "control"; devices?: string[] | null } }>(
     "/admin/keys",
-    {
-      schema: {
-        tags: ["admin"],
-        security: [{ bearerAuth: [] }],
-        body: {
-          type: "object",
-          required: ["name", "scope"],
-          additionalProperties: false,
-          properties: {
-            name: { type: "string", minLength: 1, maxLength: 80 },
-            scope: { type: "string", enum: ["read", "control"] },
-            devices: { anyOf: [{ type: "array", items: { type: "string" } }, { type: "null" }] },
-          },
-        },
-      },
-    },
+    { schema: schemas.createKey },
     async (request, reply) => {
       const token = `msb_${randomBytes(32).toString("base64url")}`;
       const key = await context.inventory.createApiKey({
@@ -500,30 +403,22 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
     },
   );
 
-  app.get(
-    "/admin/keys",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
-    async () => context.inventory.listApiKeys(),
-  );
+  app.get("/admin/keys", { schema: schemas.listKeys }, async () => context.inventory.listApiKeys());
 
   app.delete<{ Params: { name: string } }>(
     "/admin/keys/:name",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.deleteKey },
     async (request, reply) => {
       await context.inventory.deleteApiKey(request.params.name);
       return reply.code(204).send();
     },
   );
 
-  app.get(
-    "/admin/config",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
-    async () => loadConfig(),
-  );
+  app.get("/admin/config", { schema: schemas.getConfig }, async () => loadConfig());
 
   app.put<{ Body: Record<string, unknown> }>(
     "/admin/config",
-    { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
+    { schema: schemas.putConfig },
     async (request) => {
       const old = await loadConfig();
       const allowed = new Set([
