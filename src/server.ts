@@ -24,6 +24,16 @@ declare module "fastify" {
   }
 }
 
+const administratorActor: ApiKeyRecord = {
+  id: "administrator",
+  name: "administrator",
+  verifier: "",
+  scope: "control",
+  devices: null,
+  createdAt: "1970-01-01T00:00:00.000Z",
+  revokedAt: null,
+};
+
 export interface ServiceContext {
   inventory: Inventory;
   matter: MatterControllerAdapter;
@@ -79,6 +89,7 @@ async function buildApp(
       const adminToken = await readAdminToken();
       if (supplied && matches(supplied, verifier(adminToken))) {
         if (!rateLimit(authenticatedLimiter, `admin:${verifier(supplied)}`, reply)) return;
+        request.switchboardKey = administratorActor;
         return;
       }
       if (!rateLimit(unauthenticatedLimiter, `ip:${request.ip}`, reply)) return;
@@ -103,6 +114,7 @@ async function buildApp(
 
   if (audience === "admin") {
     registerAdminRoutes(app, context);
+    registerUserRoutes(app, context);
   } else {
     registerUserRoutes(app, context);
   }

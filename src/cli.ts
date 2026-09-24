@@ -4,44 +4,34 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { initConfig, loadConfig, logLevels, readAdminToken } from "./config.js";
-import { startServer } from "./server.js";
+import {
+  addMock,
+  commissionDevice,
+  createKey,
+  decommissionSelf,
+  forgetLocal,
+  getConfig,
+  listDevices,
+  listFabrics,
+  listKeys,
+  parseConfigValue,
+  pingDevice,
+  putConfig,
+  removeFabric,
+  removeMock,
+  renameDevice,
+  deleteKey,
+  rotateAdminCredential,
+  type FabricRecord,
+} from "./admin-api.js";
+import { initConfig, loadConfig } from "./config.js";
+import { confirmedValue, fabricRemovalConfirmation, requiredArgument } from "./confirm.js";
 import { deviceAllowlist } from "./inventory.js";
 import { files, ensureDirectories } from "./paths.js";
-import { confirmedValue, fabricRemovalConfirmation, requiredArgument } from "./confirm.js";
-import { createSecret } from "./security.js";
+import { startServer } from "./server.js";
+import { shouldLaunchTui } from "./tui/launch.js";
 
 const cliPath = fileURLToPath(import.meta.url);
-
-interface ApiResponse<T = unknown> {
-  response: Response;
-  data: T;
-}
-
-async function adminRequest<T = unknown>(
-  method: string,
-  pathname: string,
-  body?: unknown,
-): Promise<ApiResponse<T>> {
-  const config = await loadConfig();
-  const token = await readAdminToken();
-  const response = await fetch(`http://127.0.0.1:${config.adminPort}${pathname}`, {
-    method,
-    headers: {
-      Authorization: `Bearer ${token}`,
-      ...(body === undefined ? {} : { "Content-Type": "application/json" }),
-    },
-    ...(body === undefined ? {} : { body: JSON.stringify(body) }),
-    signal: AbortSignal.timeout(60_000),
-  });
-  const text = response.status === 204 ? "" : await response.text();
-  const data = text ? (JSON.parse(text) as T) : (undefined as T);
-  if (!response.ok) {
-    const error = data as { message?: string; error?: string };
-    throw new Error(error?.message ?? `HTTP ${response.status} ${response.statusText}`);
-  }
-  return { response, data };
-}
 
 async function runLockedServer(): Promise<void> {
   await ensureDirectories();
@@ -205,7 +195,15 @@ async function init(): Promise<void> {
   }
 }
 
-function deviceRows(devices: Array<Record<string, unknown>>): void {
+function deviceRows(
+  devices: Array<{
+    slug: string;
+    kind: string;
+    endpoints?: unknown;
+    endpointCount?: unknown;
+    nodeId?: unknown;
+  }>,
+): void {
   if (devices.length === 0) return console.log("No devices registered.");
   for (const device of devices) {
     const endpoints = Array.isArray(device.endpoints)
@@ -232,6 +230,13 @@ async function createProgram(): Promise<void> {
     .command("server")
     .description("Run the API and Matter controller")
     .action(runLockedServer);
+  program
+    .command("tui")
+    .description("Open the live dashboard and configure screens")
+    .action(async () => {
+      const { runTui } = await import("./tui/app.js");
+      await runTui();
+    });
 
   const mock = program.command("mock").description("Manage persistent two-socket mock strips");
   mock
@@ -240,15 +245,13 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      const { data } = await adminRequest("POST", "/admin/mocks", { slug: chosen });
-      console.log(JSON.stringify(data, null, 2));
+      console.log(JSON.stringify(await addMock(chosen), null, 2));
     });
   mock
     .command("list")
     .description("List mock strips")
     .action(async () => {
-      const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      deviceRows(data.filter((item) => item.kind === "mock"));
+      deviceRows((await listDevices()).filter((item) => item.kind === "mock"));
     });
   mock
     .command("remove")
@@ -256,7 +259,7 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      await adminRequest("DELETE", `/admin/mocks/${encodeURIComponent(chosen)}`);
+      await removeMock(chosen);
       console.log(`Removed mock '${chosen}'.`);
     });
 
@@ -278,9 +281,9 @@ async function createProgram(): Promise<void> {
       ) => {
         const chosenSlug = await argument(slug, "slug", "Device slug: ");
         const code = await argument(setupCode, "setup-code", "Temporary Matter setup code: ", true);
-        const { data } = await adminRequest("POST", "/admin/devices/commission", {
-          setupCode: code,
+        const data = await commissionDevice({
           slug: chosenSlug,
+          setupCode: code,
           ...(options.allowAttestationBypass ? { allowAttestationBypass: true } : {}),
         });
         console.log(`Commissioned '${chosenSlug}':`);
@@ -291,8 +294,7 @@ async function createProgram(): Promise<void> {
     .command("list")
     .description("List registered devices")
     .action(async () => {
-      const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      deviceRows(data);
+      deviceRows(await listDevices());
     });
   device
     .command("show")
@@ -300,8 +302,7 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      const found = data.find((item) => item.slug === chosen);
+      const found = (await listDevices()).find((item) => item.slug === chosen);
       if (!found) throw new Error(`Device '${chosen}' was not found`);
       console.log(JSON.stringify(found, null, 2));
     });
@@ -313,12 +314,7 @@ async function createProgram(): Promise<void> {
     .action(async (slug: string | undefined, newSlug: string | undefined) => {
       const current = await argument(slug, "slug", "Device slug: ");
       const next = await argument(newSlug, "new-slug", "New device slug: ");
-      const { data } = await adminRequest(
-        "POST",
-        `/admin/devices/${encodeURIComponent(current)}/rename`,
-        { slug: next },
-      );
-      console.log(JSON.stringify(data, null, 2));
+      console.log(JSON.stringify(await renameDevice(current, next), null, 2));
     });
   device
     .command("ping")
@@ -326,11 +322,7 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      const { data } = await adminRequest(
-        "POST",
-        `/admin/devices/${encodeURIComponent(chosen)}/ping`,
-      );
-      console.log(JSON.stringify(data, null, 2));
+      console.log(JSON.stringify(await pingDevice(chosen), null, 2));
     });
   device
     .command("decommission-self")
@@ -343,10 +335,7 @@ async function createProgram(): Promise<void> {
         `Remove the Matter Switchboard fabric from '${chosen}'? Type '${chosen}': `,
         "Confirmation did not match; device was not changed",
       );
-      await adminRequest(
-        "DELETE",
-        `/admin/devices/${encodeURIComponent(chosen)}/decommission-self`,
-      );
+      await decommissionSelf(chosen);
       console.log(`Decommissioned '${chosen}' from the Switchboard fabric.`);
     });
   device
@@ -360,7 +349,7 @@ async function createProgram(): Promise<void> {
         `Forget '${chosen}' locally? The Matter fabric may remain on the device. Type '${chosen}': `,
         "Confirmation did not match; local state was not changed",
       );
-      await adminRequest("DELETE", `/admin/devices/${encodeURIComponent(chosen)}/forget-local`);
+      await forgetLocal(chosen);
       console.log(`Forgot '${chosen}' locally. The device may still hold this Matter fabric.`);
     });
   device
@@ -369,8 +358,7 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      const found = data.find((item) => item.slug === chosen);
+      const found = (await listDevices()).find((item) => item.slug === chosen);
       if (!found) throw new Error(`Device '${chosen}' was not found`);
       console.log(JSON.stringify(found.endpoints, null, 2));
     });
@@ -382,11 +370,7 @@ async function createProgram(): Promise<void> {
     .argument("[slug]", "device slug")
     .action(async (slug: string | undefined) => {
       const chosen = await argument(slug, "slug", "Device slug: ");
-      const { data } = await adminRequest(
-        "GET",
-        `/admin/devices/${encodeURIComponent(chosen)}/fabrics`,
-      );
-      console.log(JSON.stringify(data, null, 2));
+      console.log(JSON.stringify(await listFabrics(chosen), null, 2));
     });
   fabric
     .command("remove")
@@ -405,10 +389,8 @@ async function createProgram(): Promise<void> {
       ) => {
         const chosen = await argument(slug, "slug", "Device slug: ");
         const index = await argument(fabricIndex, "fabric-index", "Fabric index: ");
-        const { data: fabrics } = await adminRequest<
-          Array<{ fabricIndex: number; label: string; vendorId: number }>
-        >("GET", `/admin/devices/${encodeURIComponent(chosen)}/fabrics`);
-        const target = fabrics.find((item) => item.fabricIndex === Number(index));
+        const fabrics = await listFabrics(chosen);
+        const target = fabrics.find((item: FabricRecord) => item.fabricIndex === Number(index));
         if (!target) throw new Error(`Fabric index ${index} was not found`);
         const expected = fabricRemovalConfirmation(target);
         const prompt =
@@ -422,11 +404,7 @@ async function createProgram(): Promise<void> {
           expected,
           mismatch: "Confirmation did not match; fabric was not removed",
         });
-        await adminRequest(
-          "DELETE",
-          `/admin/devices/${encodeURIComponent(chosen)}/fabrics/${index}`,
-          { confirmLabel: entered },
-        );
+        await removeFabric(chosen, Number(index), entered);
         console.log(`Removed fabric ${index} from '${chosen}'.`);
       },
     );
@@ -447,19 +425,17 @@ async function createProgram(): Promise<void> {
       if (deviceArgs.length === 0 && process.stdin.isTTY) {
         deviceArgs = [await ask("Devices (space or comma separated, empty for all): ")];
       }
-      const allowlist = deviceAllowlist(deviceArgs);
-      const { data } = await adminRequest("POST", "/admin/keys", {
+      const data = await createKey({
         name: chosenName,
         scope: chosenScope,
-        ...(allowlist ? { devices: allowlist } : {}),
+        devices: deviceAllowlist(deviceArgs),
       });
       console.log("Copy this key now; it is shown only once:");
-      console.log((data as { token: string }).token);
-      console.log(JSON.stringify({ ...(data as object), token: "[shown above]" }, null, 2));
+      console.log(data.token);
+      console.log(JSON.stringify({ ...data, token: "[shown above]" }, null, 2));
     });
   key.command("list").action(async () => {
-    const { data } = await adminRequest("GET", "/admin/keys");
-    console.log(JSON.stringify(data, null, 2));
+    console.log(JSON.stringify(await listKeys(), null, 2));
   });
   key
     .command("delete")
@@ -467,14 +443,13 @@ async function createProgram(): Promise<void> {
     .argument("[name]", "key name")
     .action(async (name: string | undefined) => {
       const chosen = await argument(name, "name", "Key name: ");
-      await adminRequest("DELETE", `/admin/keys/${encodeURIComponent(chosen)}`);
+      await deleteKey(chosen);
       console.log(`Deleted key '${chosen}'.`);
     });
 
   const config = program.command("config").description("Inspect or update service settings");
   config.command("show").action(async () => {
-    const { data } = await adminRequest("GET", "/admin/config");
-    console.log(JSON.stringify(data, null, 2));
+    console.log(JSON.stringify(await getConfig(), null, 2));
   });
   config
     .command("set")
@@ -484,36 +459,9 @@ async function createProgram(): Promise<void> {
     .action(async (name: string | undefined, value: string | undefined) => {
       const setting = await argument(name, "name", "Setting name: ");
       const raw = await argument(value, "value", "Setting value: ");
-      const { data: current } = await adminRequest<Record<string, unknown>>("GET", "/admin/config");
-      const numeric = ["apiPort", "adminPort"];
-      const booleans = ["allowAttestationBypass"];
-      let parsed: unknown = raw;
-      if (numeric.includes(setting)) parsed = Number(raw);
-      if (booleans.includes(setting)) {
-        if (raw !== "true" && raw !== "false") {
-          throw new Error(`${setting} must be true or false`);
-        }
-        parsed = raw === "true";
-      }
-      if (setting === "logLevel") {
-        const level = raw.toLowerCase();
-        if (!(logLevels as readonly string[]).includes(level)) {
-          throw new Error("logLevel must be debug, info, notice, warn, error, or fatal");
-        }
-        parsed = level;
-      }
-      if (
-        numeric.includes(setting) &&
-        (!Number.isInteger(parsed) || Number(parsed) < 1024 || Number(parsed) > 65535)
-      ) {
-        throw new Error(`${setting} must be an integer from 1024 through 65535`);
-      }
-      if (!(setting in current) || setting === "adminHost")
-        throw new Error(`Setting '${setting}' cannot be changed`);
-      const { data } = await adminRequest("PUT", "/admin/config", {
-        ...current,
-        [setting]: parsed,
-      });
+      const current = await getConfig();
+      const parsed = parseConfigValue(setting, raw, current);
+      const data = await putConfig({ ...current, [setting]: parsed });
       console.log(JSON.stringify(data, null, 2));
       if (setting === "logLevel") {
         console.log("Log level applied to the running service.");
@@ -529,9 +477,7 @@ async function createProgram(): Promise<void> {
     .description("Rotate local administrator API credential")
     .command("rotate")
     .action(async () => {
-      const token = createSecret("msb_admin");
-      await fs.writeFile(files.adminCredential, `${token}\n`, { mode: 0o600 });
-      await fs.chmod(files.adminCredential, 0o600);
+      await rotateAdminCredential();
       console.log("Rotated administrator credential. Existing user API keys were not changed.");
     });
 
@@ -541,6 +487,11 @@ async function createProgram(): Promise<void> {
 async function main(): Promise<void> {
   if (process.argv[2] === "_server-child") {
     await runServerChild();
+    return;
+  }
+  if (shouldLaunchTui(process.argv, Boolean(process.stdout.isTTY))) {
+    const { runTui } = await import("./tui/app.js");
+    await runTui();
     return;
   }
   await createProgram();

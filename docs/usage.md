@@ -5,12 +5,38 @@ administrator API over loopback HTTP. Remote programs use the user API over the
 configured LAN IP and authenticate with scoped bearer keys.
 
 Run `matter-switchboard --help` or `matter-switchboard <command> --help` for
-complete flags and output formats.
+complete flags and output formats. On an interactive terminal,
+`matter-switchboard` with no arguments opens the live dashboard;
+`matter-switchboard tui` opens the same app. Non-interactive no-args use still
+prints Commander help. Existing subcommands keep their current flags and
+output.
 
 Required arguments are prompted on a terminal. The setup code is not echoed.
 A command that is not attached to a terminal exits if a required argument is
 missing. Fabric removal also asks for the current fabric label on a terminal,
 or takes `--confirm-fabric-label` when it is not.
+
+## Interactive dashboard
+
+The dashboard lists strips and sockets with on/off, current, voltage, wattage,
+and reachability. It talks to the loopback administrator listener. If that
+listener is down, the screen tells you to run `matter-switchboard server` in
+another terminal. The dashboard does not start or stop the server.
+
+- Enter toggles the focused socket.
+- `c` opens configure (commission, mocks, fabrics, keys, config, init).
+  Polling pauses until you press Esc back to the dashboard.
+- `q` or Ctrl+C leaves the app.
+
+Configure keeps the same confirmations as the CLI: type the device slug to
+decommission or forget, type the fabric label (or its index when the label is
+empty) to remove a fabric, and the Matter setup code is masked. A newly created
+API key stays on screen until you go back.
+
+The loopback administrator listener also serves the `/v1` device and outlet
+routes, authenticated with the administrator credential. The TUI uses those
+routes for live reads and toggles. The LAN user listener still requires a
+program API key and does not accept the administrator credential.
 
 ## Administration
 

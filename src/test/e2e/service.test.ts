@@ -218,6 +218,30 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
   assert.equal((await add.exited).code, 0, add.output());
   assert.match(add.output(), /Two Socket Mock Strip/);
 
+  const help = command(env, "--help");
+  assert.equal((await help.exited).code, 0, help.output());
+  assert.match(help.output(), /Usage: matter-switchboard/);
+  assert.match(help.output(), /tui/);
+
+  const adminToken = (
+    await readFile(path.join(env.XDG_CONFIG_HOME!, "matter-switchboard", "admin-token"), "utf8")
+  ).trim();
+  const adminBase = `http://127.0.0.1:${config.adminPort}`;
+  const adminHeaders = { Authorization: `Bearer ${adminToken}` };
+  const adminDevices = await fetch(`${adminBase}/v1/devices`, { headers: adminHeaders });
+  assert.equal(adminDevices.status, 200, await adminDevices.text());
+  const adminPower = await fetch(`${adminBase}/v1/devices/test-strip/endpoints/1/power`, {
+    method: "PUT",
+    headers: { ...adminHeaders, "Content-Type": "application/json" },
+    body: JSON.stringify({ on: true }),
+  });
+  assert.equal(adminPower.status, 200, await adminPower.text());
+  const adminOpenapi = await fetch(`${adminBase}/openapi.json`);
+  assert.equal(adminOpenapi.status, 200);
+  const adminSpec = (await adminOpenapi.json()) as { paths: Record<string, unknown> };
+  assert.ok(adminSpec.paths["/v1/devices/{slug}/endpoints/{endpointId}/power"]);
+  assert.ok(adminSpec.paths["/admin/devices"]);
+
   const makeKey = command(env, "key", "create", "e2e", "control", "test-strip");
   assert.equal((await makeKey.exited).code, 0, makeKey.output());
   const token = makeKey.output().match(/msb_[A-Za-z0-9_-]{40,}/)?.[0];

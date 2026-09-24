@@ -12,8 +12,9 @@ on one LAN, with one Matter fabric owned by the Switchboard controller.
   node state.
 - **HTTP server:** Fastify with request schemas and generated OpenAPI.
 - **Admin CLI:** TypeScript command-line client using the administrator HTTP
-  listener on loopback. The user API listener is bound to the configured LAN
-  address.
+  listener on loopback. On an interactive terminal, the same binary opens a
+  full-screen dashboard and configure UI. The user API listener is bound to the
+  configured LAN address.
 - **Management files:** Small user-owned JSON configuration and inventory
   files, written atomically. No database daemon is required.
 - **Documentation UI:** OpenAPI JSON and Swagger UI, available on the LAN API
@@ -79,16 +80,21 @@ There are two HTTP API surfaces, hosted by separate listeners in the same
 process:
 
 1. **Administrator API** — device commissioning and removal, inventory
-   management, reachability checks, and API-key management. It listens on
-   loopback by default and is used by the local CLI.
+   management, reachability checks, and API-key management. It also serves the
+   `/v1` device and outlet routes so the local CLI and TUI can read state and
+   toggle sockets with the administrator credential. It listens on loopback and
+   is used by the local CLI.
 2. **User API** — device and endpoint inventory, state reads, and outlet power
    commands. It listens on the configured LAN address for remote programs.
+   Program API keys are required. The administrator credential is not accepted
+   on this listener.
 
-Each listener publishes its own OpenAPI document containing only that
-listener's routes. Admin routes require an administrator credential; user
-routes require a scoped API key. Swagger UI and the OpenAPI document are
-readable without authentication on either listener, but operations still
-enforce authentication and authorization.
+Each listener publishes its own OpenAPI document. The administrator document
+includes management routes and the `/v1` outlet routes. The user document
+includes only the `/v1` routes. Admin-only routes require an administrator
+credential; `/v1` routes on the LAN listener require a scoped API key. Swagger
+UI and the OpenAPI document are readable without authentication on either
+listener, but operations still enforce authentication and authorization.
 
 The user API uses stable device slugs for URLs. Each slug maps to an internal
 Matter Node ID; endpoint IDs identify individual outlets. Slugs can be renamed
@@ -112,7 +118,8 @@ disrupting other programs.
 
 ### Administrator CLI
 
-The CLI calls administrator HTTP routes on loopback and reads its administrator
+The CLI calls administrator HTTP routes on loopback, including the `/v1`
+outlet routes mounted on that listener, and reads its administrator
 credential from the invoking user's configuration directory. The credential
 file is owned by that user and has mode `0600`; configuration directories have
 mode `0700`. The administrator listener binds only to loopback by default. The
@@ -144,11 +151,12 @@ not defined yet; see [Open decisions](open_decisions.md#outlet-command-rate-limi
 - OpenAPI 3 document: `GET /openapi.json` on each listener
 - Swagger UI: `GET /docs` on each listener
 
-The administrator OpenAPI document describes management routes; the user
-OpenAPI document describes device and outlet routes. Each documents its bearer
-authentication requirement. Swagger is useful for discovery and manual
-development, not as an authorization mechanism. It is served by the local
-service and is not published to an external documentation host.
+The administrator OpenAPI document describes management routes and the `/v1`
+device and outlet routes; the user OpenAPI document describes device and outlet
+routes only. Each documents its bearer authentication requirement. Swagger is
+useful for discovery and manual development, not as an authorization
+mechanism. It is served by the local service and is not published to an
+external documentation host.
 
 ## Security boundaries
 
