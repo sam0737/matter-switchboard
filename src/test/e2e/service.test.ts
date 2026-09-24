@@ -109,12 +109,20 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
   const token = makeKey.output().match(/msb_[A-Za-z0-9_-]{40,}/)?.[0];
   assert.ok(token, makeKey.output());
 
+  for (let i = 0; i < 5; i++) {
+    assert.equal((await fetch(`${base}/health`)).status, 200);
+    assert.equal((await fetch(`${base}/docs`)).status, 200);
+    assert.equal((await fetch(`${base}/openapi.json`)).status, 200);
+  }
   const unauthorized = await fetch(`${base}/v1/devices`);
   assert.equal(unauthorized.status, 401);
+  assert.equal((await fetch(`${base}/v1/devices`)).status, 401);
   assert.equal((await fetch(`${base}/v1/devices`)).status, 401);
   const throttled = await fetch(`${base}/v1/devices`);
   assert.equal(throttled.status, 429);
   assert.ok(Number(throttled.headers.get("retry-after")) >= 1);
+  assert.equal((await fetch(`${base}/health`)).status, 200);
+  assert.equal((await fetch(`${base}/docs`)).status, 200);
   const headers = { Authorization: `Bearer ${token}` };
   const devicesResponse = await fetch(`${base}/v1/devices`, { headers });
   assert.equal(devicesResponse.status, 200);

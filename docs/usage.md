@@ -145,8 +145,9 @@ Authorization: Bearer <api-key>
 ```
 
 Do not put credentials in a URL. The OpenAPI schema is at `/openapi.json` and
-Swagger UI is at `/docs` on the configured API listener. The docs are open for
-inspection; protected operations still require authentication.
+Swagger UI is at `/docs` on the configured API listener. The docs and health
+check are open for inspection and are exempt from the API rate limit. Protected
+operations still require authentication.
 
 ### List devices and endpoints
 
@@ -212,7 +213,8 @@ strip is reachable.
 
 ### Rate-limit responses
 
-Unauthenticated requests are limited to 3 requests per source IP per 5 seconds.
-Authenticated requests are limited to 30 requests per API key per 5 seconds.
-Exceeding a limit returns HTTP `429` and `Retry-After`. Outlet-specific
+Restricted routes are rate limited. Unauthenticated requests are limited to 3
+requests per source IP per 5 seconds. Authenticated requests are limited to 30
+requests per API key per 5 seconds. `/health`, `/openapi.json`, and `/docs` are
+exempt. Exceeding a limit returns HTTP `429` and `Retry-After`. Outlet-specific
 debounce/rate limits remain an open decision.

@@ -48,6 +48,14 @@ function rateLimit(limiter: SlidingWindowLimiter, key: string, reply: FastifyRep
   return false;
 }
 
+/** Docs, the OpenAPI document, and the health check are open and unlimited. */
+function isPublicPath(url: string): boolean {
+  const path = url.split("?", 1)[0] ?? url;
+  return (
+    path === "/health" || path === "/openapi.json" || path === "/docs" || path.startsWith("/docs/")
+  );
+}
+
 async function buildApp(
   context: ServiceContext,
   audience: "admin" | "user",
@@ -55,10 +63,10 @@ async function buildApp(
   const app = Fastify({ logger: false, trustProxy: false, bodyLimit: 64 * 1024 });
   const unauthenticatedLimiter = new SlidingWindowLimiter(3, 5_000);
   const authenticatedLimiter = new SlidingWindowLimiter(30, 5_000);
-  const publicPath = (url: string) =>
-    url.startsWith("/docs") || url === "/openapi.json" || url === "/health";
 
   app.addHook("onRequest", async (request, reply) => {
+    if (isPublicPath(request.url)) return;
+
     const supplied = bearer(request);
     if (audience === "admin") {
       const adminToken = await readAdminToken();
@@ -67,7 +75,6 @@ async function buildApp(
         return;
       }
       if (!rateLimit(unauthenticatedLimiter, `ip:${request.ip}`, reply)) return;
-      if (publicPath(request.url)) return;
       return reply
         .code(401)
         .send({ error: "unauthorized", message: "Administrator credential required" });
@@ -81,7 +88,6 @@ async function buildApp(
       return;
     }
     if (!rateLimit(unauthenticatedLimiter, `ip:${request.ip}`, reply)) return;
-    if (publicPath(request.url)) return;
     return reply.code(401).send({ error: "unauthorized", message: "Valid API key required" });
   });
 

@@ -128,10 +128,10 @@ policy. It is disabled by default.
 
 ### Rate limits
 
-The HTTP process applies an in-memory sliding-window rate limiter:
+The HTTP process applies an in-memory sliding-window rate limiter to restricted routes. `/health`, `/openapi.json`, and `/docs` (including Swagger assets) are exempt.
 
-- Unauthenticated requests: **3 requests per IP per 5 seconds**.
-- Authenticated requests: **30 requests per API key per 5 seconds**.
+- Unauthenticated requests to restricted routes: **3 requests per IP per 5 seconds**.
+- Authenticated requests to restricted routes: **30 requests per API key per 5 seconds**.
 
 Rejected requests return HTTP `429 Too Many Requests` and a `Retry-After`
 header. In-memory counters reset when the service restarts and are not shared
