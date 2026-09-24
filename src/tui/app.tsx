@@ -6,6 +6,7 @@ import { Dashboard } from "./dashboard.js";
 import { errorMessage } from "./format.js";
 import {
   POLL_INTERVAL_MS,
+  TOGGLE_REFRESH_MS,
   applyInventory,
   applyOutletRead,
   applyServerDown,
@@ -34,6 +35,14 @@ function App() {
   const [state, setState] = useState<TuiState>(initialState);
   const stateRef = useRef(state);
   stateRef.current = state;
+  const postToggleTimer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+
+  useEffect(
+    () => () => {
+      if (postToggleTimer.current) clearTimeout(postToggleTimer.current);
+    },
+    [],
+  );
 
   useEffect(() => {
     if (state.mode !== "dashboard") return;
@@ -100,15 +109,32 @@ function App() {
     };
   }, [state.mode]);
 
+  const refreshToggledOutlet = (slug: string, endpointId: number, epoch: number) => {
+    void (async () => {
+      try {
+        const outlet = await readOutletState(slug, endpointId);
+        setState((current) => applyOutletRead(current, slug, outlet, epoch));
+      } catch {
+        // The command result stays on screen. The poller reads this strip again.
+      }
+    })();
+  };
+
   const onToggle = () => {
     const started = beginToggle(stateRef.current);
     if (!started) return;
     setState(started.state);
     const { slug, endpointId, on } = started.target;
+    const epoch = currentEpoch(started.state, slug);
     void (async () => {
       try {
         const result = await setOutletPower(slug, endpointId, on);
         setState((current) => finishToggle(current, slug, endpointId, result.observed));
+        if (postToggleTimer.current) clearTimeout(postToggleTimer.current);
+        postToggleTimer.current = setTimeout(
+          () => refreshToggledOutlet(slug, endpointId, epoch),
+          TOGGLE_REFRESH_MS,
+        );
       } catch (error) {
         setState((current) =>
           finishToggle(current, slug, endpointId, { error: errorMessage(error) }),

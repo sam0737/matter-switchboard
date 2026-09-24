@@ -2,6 +2,9 @@ import type { DeviceRecord, OutletRecord } from "../model.js";
 
 export const POLL_INTERVAL_MS = 5_000;
 
+/** A second read after a toggle, once a late electrical report can land. */
+export const TOGGLE_REFRESH_MS = 1_000;
+
 export type Mode = "dashboard" | "configure";
 
 export interface OutletView {

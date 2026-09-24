@@ -150,12 +150,26 @@ export class MatterControllerAdapter {
     const commands = endpoint.commandsOf(OnOffClient);
     if (on) await commands.on();
     else await commands.off();
-    const state = endpoint.stateOf(OnOffClient);
+    // The subscribed cache can still show the previous switch position and readings.
+    let switchState = endpoint.stateOf(OnOffClient);
+    try {
+      switchState = await endpoint.getStateOf(OnOffClient);
+    } catch {
+      // The command succeeded. Keep the subscribed switch position if the fresh read fails.
+    }
+    let measurement = endpoint.maybeStateOf(ElectricalPowerMeasurementClient);
+    if (measurement) {
+      try {
+        measurement = await endpoint.getStateOf(ElectricalPowerMeasurementClient);
+      } catch {
+        // Keep the subscribed electrical readings if the fresh read fails.
+      }
+    }
     return this.#makeOutlet(
       endpointId,
       endpoint.name || `Endpoint ${endpointId}`,
-      state.onOff,
-      endpoint.maybeStateOf(ElectricalPowerMeasurementClient),
+      switchState.onOff,
+      measurement,
     );
   }
 

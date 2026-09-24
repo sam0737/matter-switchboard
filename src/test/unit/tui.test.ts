@@ -16,6 +16,7 @@ import {
   beginToggle,
   closeConfigure,
   currentEpoch,
+  finishToggle,
   initialState,
   nextPollSlug,
   openConfigure,
@@ -214,4 +215,21 @@ test("stale poll results after a toggle do not apply", () => {
   state = applyOutletRead(state, "a", live, staleEpoch);
   assert.equal(state.dashboard.strips[0]?.endpoints[0]?.on, false);
   assert.equal(state.dashboard.strips[0]?.endpoints[0]?.pending, true);
+});
+
+test("a read after a toggle applies when it uses the toggle epoch", () => {
+  let state = applyInventory(initialState(), [device("a", [outlet(1, false, 0)])]);
+  const started = beginToggle(state);
+  assert.ok(started);
+  state = started.state;
+  const epoch = currentEpoch(state, "a");
+  const during = applyOutletRead(state, "a", outlet(1, true, 40), epoch);
+  assert.equal(during.dashboard.strips[0]?.endpoints[0]?.pending, true);
+  assert.equal(during.dashboard.strips[0]?.endpoints[0]?.on, false);
+  state = finishToggle(state, "a", 1, outlet(1, true, 0));
+  state = applyOutletRead(state, "a", outlet(1, true, 40), epoch);
+  const endpoint = state.dashboard.strips[0]?.endpoints[0];
+  assert.equal(endpoint?.pending, false);
+  assert.equal(endpoint?.on, true);
+  assert.equal(endpoint?.activePowerWatts, 40);
 });
