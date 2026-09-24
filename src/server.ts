@@ -3,6 +3,7 @@ import swagger from "@fastify/swagger";
 import swaggerUi from "@fastify/swagger-ui";
 import { randomBytes } from "node:crypto";
 import { loadConfig, readAdminToken, saveConfig } from "./config.js";
+import { fabricRemovalConfirmation } from "./confirm.js";
 import { HttpError } from "./errors.js";
 import { applyLogLevel } from "./log.js";
 import { Inventory, validateSlug } from "./inventory.js";
@@ -457,7 +458,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         (item) => item.fabricIndex === index,
       );
       if (!fabric) throw new HttpError(404, "Fabric index not found", "fabric_not_found");
-      if (!request.body.confirmLabel || request.body.confirmLabel !== fabric.label) {
+      if (request.body.confirmLabel !== fabricRemovalConfirmation(fabric)) {
         throw new HttpError(
           409,
           "Confirmation label does not match target fabric",

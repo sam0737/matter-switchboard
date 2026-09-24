@@ -114,7 +114,8 @@ matter-switchboard fabric remove patio-strip <fabric-index>
 
 Removal displays the target fabric label and available vendor information,
 then requires interactive confirmation. Non-interactive use requires
-`--confirm-fabric-label <exact-label>` and `--yes`. Removing another Matter
+`--confirm-fabric-label <exact-label>` and `--yes`. A fabric with an empty label is
+confirmed by typing its fabric index instead. Removing another Matter
 administrator can disrupt that ecosystem's access. Fabric indices are local to
 the device and can change; inspect the current fabric list immediately before
 removing one. The target device must be reachable.

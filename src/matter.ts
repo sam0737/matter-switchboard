@@ -163,8 +163,12 @@ export class MatterControllerAdapter {
     device: DeviceRecord,
   ): Promise<Array<{ fabricIndex: number; label: string; vendorId: number }>> {
     const paired = await this.#paired(device);
-    const state = paired.node.stateOf(OperationalCredentialsClient);
-    return state.fabrics.map((fabric) => ({
+    // Fabrics is fabric-scoped. The subscribed state is fabric-filtered, so it only contains
+    // this controller. An unfiltered read returns every commissioned fabric.
+    const state = await paired.node.getStateOf(OperationalCredentialsClient, ["fabrics"], {
+      fabricFilter: false,
+    });
+    return (state.fabrics ?? []).map((fabric) => ({
       fabricIndex: fabric.fabricIndex,
       label: fabric.label,
       vendorId: fabric.vendorId,

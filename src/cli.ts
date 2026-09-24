@@ -7,6 +7,7 @@ import { fileURLToPath } from "node:url";
 import { initConfig, loadConfig, logLevels, readAdminToken } from "./config.js";
 import { startServer } from "./server.js";
 import { files, ensureDirectories } from "./paths.js";
+import { fabricRemovalConfirmation } from "./confirm.js";
 import { createSecret } from "./security.js";
 
 const cliPath = fileURLToPath(import.meta.url);
@@ -321,7 +322,10 @@ async function createProgram(): Promise<void> {
     .command("remove <slug> <fabricIndex>")
     .description("Remove another fabric after explicit label confirmation")
     .option("--yes", "Confirm after typing the exact fabric label")
-    .option("--confirm-fabric-label <label>", "Exact current label of the fabric to remove")
+    .option(
+      "--confirm-fabric-label <label>",
+      "Exact fabric label, or the fabric index when the label is empty",
+    )
     .action(
       async (
         slug: string,
@@ -333,12 +337,13 @@ async function createProgram(): Promise<void> {
         >("GET", `/admin/devices/${encodeURIComponent(slug)}/fabrics`);
         const target = fabrics.find((item) => item.fabricIndex === Number(fabricIndex));
         if (!target) throw new Error(`Fabric index ${fabricIndex} was not found`);
-        const entered =
-          options.confirmFabricLabel ??
-          (await ask(
-            `Target fabric '${target.label}' (vendor ${target.vendorId}). Type the exact label to remove it: `,
-          ));
-        if (entered !== target.label)
+        const expected = fabricRemovalConfirmation(target);
+        const prompt =
+          target.label.length > 0
+            ? `Target fabric '${target.label}' (vendor ${target.vendorId}). Type the exact label to remove it: `
+            : `Target fabric has no label (index ${target.fabricIndex}, vendor ${target.vendorId}). Type ${expected} to remove it: `;
+        const entered = options.confirmFabricLabel ?? (await ask(prompt));
+        if (entered !== expected)
           throw new Error("Confirmation did not match; fabric was not removed");
         if (options.confirmFabricLabel && !options.yes)
           throw new Error("Non-interactive removal also requires --yes");
