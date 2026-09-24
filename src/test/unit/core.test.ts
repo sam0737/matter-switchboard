@@ -4,6 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import test from "node:test";
 import { decideAttestation } from "../../attestation.js";
+import { unregisteredCommissionedNode } from "../../commissioned.js";
 import { defaultConfig, validateConfig } from "../../config.js";
 import { Inventory } from "../../inventory.js";
 import { SlidingWindowLimiter } from "../../limiter.js";
@@ -124,6 +125,15 @@ test("attestation accepts every finding below error", () => {
   assert.equal(
     decideAttestation([{ level: "error", type: "PaaNotTrusted", message: "no" }], true),
     true,
+  );
+});
+
+test("a fabric conflict restores the single unregistered commissioned node", () => {
+  assert.equal(unregisteredCommissionedNode(["10", "20"], ["10"]), "20");
+  assert.throws(() => unregisteredCommissionedNode(["10"], ["10"]), /no unregistered node/);
+  assert.throws(
+    () => unregisteredCommissionedNode(["10", "20"], []),
+    /2 commissioned nodes are not in the inventory/,
   );
 });
 

@@ -345,6 +345,9 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         {
           allowAttestationBypass:
             request.body.allowAttestationBypass ?? context.allowAttestationBypass,
+          registeredNodeIds: context.inventory
+            .list()
+            .flatMap((item) => (item.kind === "matter" && item.nodeId ? [item.nodeId] : [])),
         },
       );
       return reply.code(201).send(await context.inventory.addMatter(device));

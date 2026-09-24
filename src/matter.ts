@@ -6,9 +6,14 @@ import { ElectricalPowerMeasurementClient } from "@matter/main/behaviors/electri
 import { OnOffClient } from "@matter/main/behaviors/on-off";
 import { OperationalCredentialsClient } from "@matter/main/behaviors/operational-credentials";
 import { FabricIndex, ManualPairingCodeCodec, NodeId, VendorId } from "@matter/main/types";
-import { DclCertificateService } from "@matter/protocol";
+import {
+  DclCertificateService,
+  DeviceAlreadyCommissionedToThisFabricError,
+} from "@matter/protocol";
 import { CommissioningController } from "@project-chip/matter.js";
+import type { PairedNode } from "@project-chip/matter.js/device";
 import { decideAttestation } from "./attestation.js";
+import { unregisteredCommissionedNode } from "./commissioned.js";
 import type { DeviceRecord, OutletRecord } from "./model.js";
 import { files } from "./paths.js";
 
@@ -20,6 +25,7 @@ const timeout = <T>(promise: PromiseLike<T>, ms: number, label: string): Promise
 
 export interface CommissionOptions {
   allowAttestationBypass?: boolean;
+  registeredNodeIds?: Iterable<string>;
 }
 
 export class MatterControllerAdapter {
@@ -74,66 +80,38 @@ export class MatterControllerAdapter {
     }
     const controller = await this.start();
     const payload = ManualPairingCodeCodec.decode(setupCode);
-    const nodeId = await controller.commissionNode({
-      passcode: payload.passcode,
-      commissioning: {
-        regulatoryLocation: GeneralCommissioning.RegulatoryLocationType.IndoorOutdoor,
-        regulatoryCountryCode: countryCode,
-        onAttestationFailure: (findings) => {
-          const decision = decideAttestation(findings, allowAttestationBypass);
-          if (decision === true) {
-            for (const finding of findings) {
-              console.info(`Attestation note accepted: ${finding.type} ${finding.message}`);
+    let nodeId: Awaited<ReturnType<CommissioningController["commissionNode"]>>;
+    try {
+      nodeId = await controller.commissionNode({
+        passcode: payload.passcode,
+        commissioning: {
+          regulatoryLocation: GeneralCommissioning.RegulatoryLocationType.IndoorOutdoor,
+          regulatoryCountryCode: countryCode,
+          onAttestationFailure: (findings) => {
+            const decision = decideAttestation(findings, allowAttestationBypass);
+            if (decision === true) {
+              for (const finding of findings) {
+                console.info(`Attestation note accepted: ${finding.type} ${finding.message}`);
+              }
             }
-          }
-          return decision;
+            return decision;
+          },
         },
-      },
-      discovery: {
-        identifierData: { shortDiscriminator: payload.shortDiscriminator },
-        discoveryCapabilities: { onIpNetwork: true },
-      },
-    });
-    const paired = await controller.getNode(nodeId);
-    const initialization = timeout(
-      paired.events.initializedFromRemote,
-      30_000,
-      "Commissioned device initialization",
-    );
-    paired.connect();
-    await initialization;
-    const info = paired.basicInformation;
-    const outlets = paired
-      .getDevices()
-      .flatMap((endpoint) => {
-        if (!endpoint.maybeStateOf(OnOffClient)) return [];
-        const endpointId = endpoint.number;
-        if (endpointId === undefined) return [];
-        const state = endpoint.maybeStateOf(OnOffClient);
-        if (!state) return [];
-        return [
-          this.#makeOutlet(
-            endpointId,
-            `Outlet ${endpointId}`,
-            state.onOff,
-            endpoint.maybeStateOf(ElectricalPowerMeasurementClient),
-          ),
-        ];
-      })
-      .sort((a, b) => a.endpointId - b.endpointId);
-    if (outlets.length === 0) throw new Error("Commissioned Matter device has no On/Off endpoints");
-    return {
-      id: randomUUID(),
-      slug,
-      kind: "matter",
-      nodeId: String(nodeId),
-      vendorName: info?.vendorName ?? null,
-      productName: info?.productName ?? null,
-      available: true,
-      lastSeen: new Date().toISOString(),
-      createdAt: new Date().toISOString(),
-      endpoints: outlets,
-    };
+        discovery: {
+          identifierData: { shortDiscriminator: payload.shortDiscriminator },
+          discoveryCapabilities: { onIpNetwork: true },
+        },
+      });
+    } catch (error) {
+      if (!isFabricConflict(error)) throw error;
+      const restored = unregisteredCommissionedNode(
+        controller.getCommissionedNodes().map((id) => String(id)),
+        options.registeredNodeIds ?? [],
+      );
+      console.info(`Device is already on this fabric; registering existing node ${restored}`);
+      nodeId = NodeId(BigInt(restored));
+    }
+    return this.#deviceRecord(slug, await this.#readyNode(nodeId));
   }
 
   async power(device: DeviceRecord, endpointId: number, on: boolean): Promise<OutletRecord> {
@@ -204,6 +182,55 @@ export class MatterControllerAdapter {
     this.#certificates = undefined;
   }
 
+  async #readyNode(nodeId: NodeId): Promise<PairedNode> {
+    const controller = await this.start();
+    const paired = await controller.getNode(nodeId);
+    if (paired.remoteInitializationDone) return paired;
+    const initialization = timeout(
+      paired.events.initializedFromRemote,
+      30_000,
+      "Commissioned device initialization",
+    );
+    if (!paired.isConnected) paired.connect();
+    await initialization;
+    return paired;
+  }
+
+  #deviceRecord(slug: string, paired: PairedNode): DeviceRecord {
+    const info = paired.basicInformation;
+    const outlets = paired
+      .getDevices()
+      .flatMap((endpoint) => {
+        if (!endpoint.maybeStateOf(OnOffClient)) return [];
+        const endpointId = endpoint.number;
+        if (endpointId === undefined) return [];
+        const state = endpoint.maybeStateOf(OnOffClient);
+        if (!state) return [];
+        return [
+          this.#makeOutlet(
+            endpointId,
+            `Outlet ${endpointId}`,
+            state.onOff,
+            endpoint.maybeStateOf(ElectricalPowerMeasurementClient),
+          ),
+        ];
+      })
+      .sort((a, b) => a.endpointId - b.endpointId);
+    if (outlets.length === 0) throw new Error("Commissioned Matter device has no On/Off endpoints");
+    return {
+      id: randomUUID(),
+      slug,
+      kind: "matter",
+      nodeId: String(paired.nodeId),
+      vendorName: info?.vendorName ?? null,
+      productName: info?.productName ?? null,
+      available: true,
+      lastSeen: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
+      endpoints: outlets,
+    };
+  }
+
   async #matterEndpoint(device: DeviceRecord, endpointId: number) {
     const paired = await this.#paired(device);
     const endpoint = paired.getDeviceById(endpointId);
@@ -257,4 +284,18 @@ export class MatterControllerAdapter {
       observedAt: new Date().toISOString(),
     };
   }
+}
+
+function isFabricConflict(error: unknown): boolean {
+  let current: unknown = error;
+  while (current instanceof Error) {
+    if (
+      current instanceof DeviceAlreadyCommissionedToThisFabricError ||
+      current.message.includes("already commissioned into this fabric")
+    ) {
+      return true;
+    }
+    current = current.cause;
+  }
+  return false;
 }
