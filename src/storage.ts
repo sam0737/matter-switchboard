@@ -20,7 +20,9 @@ export class StateStore {
       if (state.version !== 1 || !Array.isArray(state.devices) || !Array.isArray(state.apiKeys)) {
         throw new Error("Unsupported or malformed state file");
       }
-      this.#state = state;
+      const apiKeys = state.apiKeys.filter((key) => key.revokedAt === null);
+      this.#state = apiKeys.length === state.apiKeys.length ? state : { ...state, apiKeys };
+      if (apiKeys.length !== state.apiKeys.length) await this.#persist(this.#state);
     } catch (error) {
       if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
       this.#state = initialState();

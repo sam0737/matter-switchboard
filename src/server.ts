@@ -121,7 +121,7 @@ async function buildApp(
     const message = error instanceof Error ? error.message : "Unexpected server error";
     const status = /not found/i.test(message)
       ? 404
-      : /already in use|only mock|not a Matter/i.test(message)
+      : /already in use|already exists|more than one active|only mock|not a Matter/i.test(message)
         ? 409
         : 400;
     void reply.code(status).send({ error: "request_failed", message });
@@ -506,11 +506,11 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
     async () => context.inventory.listApiKeys(),
   );
 
-  app.delete<{ Params: { keyId: string } }>(
-    "/admin/keys/:keyId",
+  app.delete<{ Params: { name: string } }>(
+    "/admin/keys/:name",
     { schema: { tags: ["admin"], security: [{ bearerAuth: [] }] } },
     async (request, reply) => {
-      await context.inventory.revokeApiKey(request.params.keyId);
+      await context.inventory.deleteApiKey(request.params.name);
       return reply.code(204).send();
     },
   );

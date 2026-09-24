@@ -151,7 +151,12 @@ export class Inventory {
     verifier: string;
   }) {
     const slugs = deviceAllowlist(input.devices);
+    const keyName = input.name.trim();
+    if (!keyName) throw new Error("API key name is required");
     return this.store.update((state) => {
+      if (state.apiKeys.some((record) => record.name === keyName)) {
+        throw new Error(`API key '${keyName}' already exists`);
+      }
       const deviceIds =
         slugs?.map((slug) => {
           const device = state.devices.find((item) => item.slug === slug);
@@ -160,7 +165,7 @@ export class Inventory {
         }) ?? null;
       const key = {
         id: randomUUID(),
-        name: input.name,
+        name: keyName,
         verifier: input.verifier,
         scope: input.scope,
         devices: deviceIds,
@@ -178,11 +183,14 @@ export class Inventory {
     });
   }
 
-  async revokeApiKey(id: string): Promise<void> {
+  async deleteApiKey(name: string): Promise<void> {
+    const keyName = name.trim();
     await this.store.update((state) => {
-      const key = state.apiKeys.find((record) => record.id === id && record.revokedAt === null);
-      if (!key) throw new Error(`Active API key '${id}' was not found`);
-      key.revokedAt = new Date().toISOString();
+      const remaining = state.apiKeys.filter((record) => record.name !== keyName);
+      if (remaining.length === state.apiKeys.length) {
+        throw new Error(`API key '${keyName}' was not found`);
+      }
+      state.apiKeys = remaining;
     });
   }
 

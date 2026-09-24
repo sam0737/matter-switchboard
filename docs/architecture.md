@@ -100,13 +100,14 @@ without changing Matter identity.
 
 Keys are generated with cryptographically secure randomness. A key is displayed
 once at creation; only a verifier and metadata are stored. Each key has a name,
-creation time, scopes, and optional device allowlist. Supported
+creation time, scopes, and optional device allowlist. Key names are unique.
+Deleting a key removes its record, including the name. Supported
 scopes are `read` and `control`. Key management is available only to an
 administrator.
 
 Clients send keys with `Authorization: Bearer <key>`. Keys are not accepted in
-query strings or URLs. Revocation takes effect on the next request. One key per
-calling program is the expected use so a leaked key can be revoked without
+query strings or URLs. Deletion takes effect on the next request. One key per
+calling program is the expected use so a leaked key can be deleted without
 disrupting other programs.
 
 ### Administrator CLI

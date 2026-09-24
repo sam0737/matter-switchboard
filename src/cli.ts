@@ -431,7 +431,7 @@ async function createProgram(): Promise<void> {
       },
     );
 
-  const key = program.command("key").description("Create and revoke remote API keys");
+  const key = program.command("key").description("Create and delete remote API keys");
   key
     .command("create")
     .description("Create a remote API key")
@@ -462,13 +462,13 @@ async function createProgram(): Promise<void> {
     console.log(JSON.stringify(data, null, 2));
   });
   key
-    .command("revoke")
-    .description("Revoke a remote API key")
-    .argument("[key-id]", "key id")
-    .action(async (keyId: string | undefined) => {
-      const chosen = await argument(keyId, "key-id", "Key id: ");
+    .command("delete")
+    .description("Delete a remote API key by name")
+    .argument("[name]", "key name")
+    .action(async (name: string | undefined) => {
+      const chosen = await argument(name, "name", "Key name: ");
       await adminRequest("DELETE", `/admin/keys/${encodeURIComponent(chosen)}`);
-      console.log(`Revoked key '${chosen}'.`);
+      console.log(`Deleted key '${chosen}'.`);
     });
 
   const config = program.command("config").description("Inspect or update service settings");

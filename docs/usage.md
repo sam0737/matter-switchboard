@@ -136,14 +136,14 @@ removing one. The target device must be reachable.
 matter-switchboard key create automation-a control patio-strip garage-strip
 matter-switchboard key create dashboard read
 matter-switchboard key list
-matter-switchboard key revoke <key-id>
+matter-switchboard key delete <name>
 ```
 
 On a terminal, omit the name, scope, or devices to be prompted. Leave the
 device prompt empty, or omit device arguments in a script, to allow every
 device. Separate multiple slugs with spaces or commas.
 
-The plaintext key is shown only when created. Store it in the calling
+`key delete` removes that key's record. The plaintext key is shown only when created. Store it in the calling
 application's secret store. `read` keys can list devices/endpoints and read
 state; `control` keys can also issue outlet commands. An optional device allow
 list restricts a key to specific slugs. API keys cannot invoke administrator

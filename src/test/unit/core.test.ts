@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
@@ -75,6 +75,92 @@ test("API device allowlists remain attached to identity across rename and slug r
     assert.deepEqual(store.snapshot().apiKeys[0]?.devices, [first.id]);
     assert.notDeepEqual(store.snapshot().apiKeys[0]?.devices, [second.id]);
     assert.equal(key.devices?.[0], "plug");
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("active API key names are unique and delete removes the record", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "matter-switchboard-unit-"));
+  try {
+    const store = new StateStore(path.join(dir, "state.json"));
+    await store.load();
+    const inventory = new Inventory(store);
+    await inventory.createApiKey({
+      name: "irrigation",
+      scope: "read",
+      devices: null,
+      verifier: verifier("example-key"),
+    });
+    await assert.rejects(
+      () =>
+        inventory.createApiKey({
+          name: "irrigation",
+          scope: "control",
+          devices: null,
+          verifier: verifier("other-key"),
+        }),
+      /API key 'irrigation' already exists/,
+    );
+    await inventory.deleteApiKey("irrigation");
+    assert.equal(
+      inventory.listApiKeys().some((key) => key.name === "irrigation"),
+      false,
+    );
+    await inventory.createApiKey({
+      name: "irrigation",
+      scope: "control",
+      devices: null,
+      verifier: verifier("replacement-key"),
+    });
+    assert.equal(
+      inventory.listApiKeys().filter((key) => key.name === "irrigation" && key.revokedAt === null)
+        .length,
+      1,
+    );
+  } finally {
+    await rm(dir, { recursive: true, force: true });
+  }
+});
+
+test("loading state deletes keys that were only marked revoked", async () => {
+  const dir = await mkdtemp(path.join(os.tmpdir(), "matter-switchboard-unit-"));
+  const stateFile = path.join(dir, "state.json");
+  try {
+    await writeFile(
+      stateFile,
+      JSON.stringify({
+        version: 1,
+        devices: [],
+        apiKeys: [
+          {
+            id: "kept",
+            name: "dashboard",
+            verifier: "abc",
+            scope: "read",
+            devices: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            revokedAt: null,
+          },
+          {
+            id: "dropped",
+            name: "old-name",
+            verifier: "def",
+            scope: "read",
+            devices: null,
+            createdAt: "2026-01-01T00:00:00.000Z",
+            revokedAt: "2026-01-02T00:00:00.000Z",
+          },
+        ],
+      }),
+    );
+    const store = new StateStore(stateFile);
+    await store.load();
+    assert.deepEqual(
+      store.snapshot().apiKeys.map((key) => key.name),
+      ["dashboard"],
+    );
+    assert.equal((await readFile(stateFile, "utf8")).includes("old-name"), false);
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
