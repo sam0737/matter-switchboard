@@ -101,7 +101,7 @@ function assertOpenApi(specification: OpenApiDocument, audience: "admin" | "user
     audience === "admin" ? "Matter Switchboard Administrator API" : "Matter Switchboard User API",
   );
   assert.match(specification.info.description ?? "", /Authorization: Bearer/);
-  assert.equal(specification.info.version, "0.1.0");
+  assert.equal(specification.info.version, "1.0.0");
   assert.equal(specification.paths["/openapi.json"], undefined);
   assert.deepEqual(
     Object.keys(specification.paths).sort(),

@@ -130,6 +130,7 @@ export class MatterControllerAdapter {
       if (error instanceof AdministratorCommissioning.BusyError) {
         throw new Error(
           "The device already has a commissioning session in progress. Wait for it to finish, then share again",
+          { cause: error },
         );
       }
       throw error;

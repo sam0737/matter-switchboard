@@ -227,7 +227,7 @@ async function createProgram(): Promise<void> {
   program
     .name("matter-switchboard")
     .description("Local Matter power-strip controller and API")
-    .version("0.1.0");
+    .version("1.0.0");
 
   program
     .command("init")

@@ -94,7 +94,7 @@ export async function loadConfig(): Promise<SwitchboardConfig> {
     return validateConfig(merged);
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT")
-      throw new Error("Not initialized. Run matter-switchboard init first.");
+      throw new Error("Not initialized. Run matter-switchboard init first.", { cause: error });
     throw error;
   }
 }

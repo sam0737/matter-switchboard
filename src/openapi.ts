@@ -7,7 +7,7 @@ const authenticated = [{ bearerAuth: [] as string[] }];
 
 const userInfo = {
   title: "Matter Switchboard User API",
-  version: "0.1.0",
+  version: "1.0.0",
   description: `Programs use this API to list power strips and control their outlets.
 
 Send \`Authorization: Bearer <api-key>\` on every route except health and the documentation pages. Create a key with \`matter-switchboard key create\`. The plaintext key is shown once; store it in the calling program. Do not put the key in a URL.
@@ -25,7 +25,7 @@ An HTTP success means this API handled the call. For availability and power, rea
 
 const adminInfo = {
   title: "Matter Switchboard Administrator API",
-  version: "0.1.0",
+  version: "1.0.0",
   description: `Local administration of inventory, Matter commissioning, API keys, and service settings. The \`matter-switchboard\` CLI calls this API on 127.0.0.1. Remote programs should use the user API.
 
 Send \`Authorization: Bearer <administrator-credential>\`. \`matter-switchboard init\` creates that credential in the invoking user's configuration directory. An API key is not accepted here.
