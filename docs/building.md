@@ -63,3 +63,27 @@ npm pack
 The package contains compiled output, runtime dependencies, CLI entry points,
 and documentation. Installation is performed under the user's home directory;
 see [Installation](installation.md).
+
+## Release
+
+Pushes to `main` and pull requests run lint, format check, and tests. A
+version tag starts the publish workflow. The tag must be on `main` and must
+match `package.json`, so version `1.0.0` is released from tag `v1.0.0`.
+
+```sh
+git checkout main
+git pull
+git tag v1.0.0
+git push origin v1.0.0
+```
+
+The workflow runs in the GitHub environment `publish`. Protect that
+environment and require a reviewer before the job can run. It then uploads the
+package with `npm stage publish`. The version stays staged until a maintainer
+approves it on npmjs.com.
+
+Publishing authenticates with GitHub's OIDC token. No npm token is stored in
+the repository. Before the first tag, add a trusted publisher on npmjs.com for
+user `sam0737`, repository `matter-switchboard`, workflow `publish.yml`, and
+environment `publish`. Leave direct `npm publish` disabled so this workflow
+can only stage a release.

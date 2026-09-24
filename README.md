@@ -1,5 +1,7 @@
 # Matter Switchboard
 
+[![CI](https://github.com/sam0737/matter-switchboard/actions/workflows/ci.yml/badge.svg)](https://github.com/sam0737/matter-switchboard/actions/workflows/ci.yml)
+
 Matter Switchboard is a local-user Matter controller and HTTP API for managing
 and controlling multiple Matter power strips on one LAN. It provides a small,
 programmable interface for remote programs while keeping Matter fabric

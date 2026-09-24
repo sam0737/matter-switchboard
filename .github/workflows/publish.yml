@@ -1,0 +1,47 @@
+name: Publish
+
+on:
+  push:
+    tags: ["v*.*.*"]
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    environment: publish
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          check-latest: true
+          registry-url: https://registry.npmjs.org
+          package-manager-cache: false
+
+      # Trusted publishing needs npm >= 11.5.1. Staged publish needs >= 11.15.0.
+      # npm 12.1.0 needs Node ^22.22.2.
+      - name: Install the npm CLI used for trusted publishing
+        run: npm install --global npm@12.1.0
+
+      - name: Require the tag commit to be on main
+        run: |
+          git fetch origin main
+          git merge-base --is-ancestor HEAD origin/main
+
+      - name: Require the tag to match package.json
+        run: |
+          version="$(jq --raw-output .version package.json)"
+          if [ "$GITHUB_REF_NAME" != "v${version}" ]; then
+            echo "Tag ${GITHUB_REF_NAME} does not match package.json version ${version}"
+            exit 1
+          fi
+
+      - run: npm ci
+      - run: npm test
+      - run: npm stage publish
