@@ -8,6 +8,7 @@ export interface SwitchboardConfig {
   adminHost: "127.0.0.1";
   adminPort: number;
   matterCountryCode: string;
+  allowAttestationBypass: boolean;
 }
 
 export const defaultConfig: SwitchboardConfig = {
@@ -16,6 +17,7 @@ export const defaultConfig: SwitchboardConfig = {
   adminHost: "127.0.0.1",
   adminPort: 8091,
   matterCountryCode: "CN",
+  allowAttestationBypass: false,
 };
 
 export function validateConfig(config: SwitchboardConfig): SwitchboardConfig {
@@ -36,6 +38,9 @@ export function validateConfig(config: SwitchboardConfig): SwitchboardConfig {
   if (config.adminHost !== "127.0.0.1") throw new Error("adminHost must remain 127.0.0.1");
   if (!/^[A-Z]{2}$/.test(config.matterCountryCode)) {
     throw new Error("matterCountryCode must be a two-letter uppercase code");
+  }
+  if (typeof config.allowAttestationBypass !== "boolean") {
+    throw new Error("allowAttestationBypass must be true or false");
   }
   return config;
 }

@@ -6,7 +6,9 @@ import { ElectricalPowerMeasurementClient } from "@matter/main/behaviors/electri
 import { OnOffClient } from "@matter/main/behaviors/on-off";
 import { OperationalCredentialsClient } from "@matter/main/behaviors/operational-credentials";
 import { FabricIndex, ManualPairingCodeCodec, NodeId, VendorId } from "@matter/main/types";
+import { DclCertificateService } from "@matter/protocol";
 import { CommissioningController } from "@project-chip/matter.js";
+import { decideAttestation } from "./attestation.js";
 import type { DeviceRecord, OutletRecord } from "./model.js";
 import { files } from "./paths.js";
 
@@ -16,9 +18,19 @@ const timeout = <T>(promise: PromiseLike<T>, ms: number, label: string): Promise
     new Promise<T>((_, reject) => setTimeout(() => reject(new Error(`${label} timed out`)), ms)),
   ]);
 
+export interface CommissionOptions {
+  allowAttestationBypass?: boolean;
+}
+
 export class MatterControllerAdapter {
   #controller: CommissioningController | undefined;
+  #certificates: DclCertificateService | undefined;
   #starting: Promise<CommissioningController> | undefined;
+  #allowAttestationBypass: boolean;
+
+  constructor(options: { allowAttestationBypass?: boolean } = {}) {
+    this.#allowAttestationBypass = options.allowAttestationBypass ?? false;
+  }
 
   async start(): Promise<CommissioningController> {
     if (this.#controller) return this.#controller;
@@ -26,6 +38,11 @@ export class MatterControllerAdapter {
     this.#starting = (async () => {
       const environment = Environment.default;
       environment.vars.set("storage.path", path.resolve(files.matterStorage));
+      if (!this.#certificates) {
+        const certificates = new DclCertificateService(environment);
+        await certificates.construction;
+        this.#certificates = certificates;
+      }
       const controller = new CommissioningController({
         environment: { environment, id: "matter-switchboard" },
         adminFabricLabel: "Matter Switchboard",
@@ -43,7 +60,18 @@ export class MatterControllerAdapter {
     }
   }
 
-  async commission(setupCode: string, slug: string, countryCode = "CN"): Promise<DeviceRecord> {
+  async commission(
+    setupCode: string,
+    slug: string,
+    countryCode = "CN",
+    options: CommissionOptions = {},
+  ): Promise<DeviceRecord> {
+    const allowAttestationBypass = options.allowAttestationBypass ?? this.#allowAttestationBypass;
+    if (allowAttestationBypass) {
+      console.warn(
+        "Commissioning with attestation bypass: findings will be accepted instead of rejected",
+      );
+    }
     const controller = await this.start();
     const payload = ManualPairingCodeCodec.decode(setupCode);
     const nodeId = await controller.commissionNode({
@@ -51,7 +79,15 @@ export class MatterControllerAdapter {
       commissioning: {
         regulatoryLocation: GeneralCommissioning.RegulatoryLocationType.IndoorOutdoor,
         regulatoryCountryCode: countryCode,
-        onAttestationFailure: false,
+        onAttestationFailure: (findings) => {
+          const decision = decideAttestation(findings, allowAttestationBypass);
+          if (decision === true) {
+            for (const finding of findings) {
+              console.info(`Attestation note accepted: ${finding.type} ${finding.message}`);
+            }
+          }
+          return decision;
+        },
       },
       discovery: {
         identifierData: { shortDiscriminator: payload.shortDiscriminator },
@@ -164,6 +200,8 @@ export class MatterControllerAdapter {
   async close(): Promise<void> {
     await this.#controller?.close();
     this.#controller = undefined;
+    await this.#certificates?.close();
+    this.#certificates = undefined;
   }
 
   async #matterEndpoint(device: DeviceRecord, endpointId: number) {

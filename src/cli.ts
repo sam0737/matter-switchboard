@@ -220,12 +220,17 @@ async function createProgram(): Promise<void> {
   device
     .command("commission [slug]")
     .description("Commission a strip using a multi-admin setup code")
-    .action(async (slug?: string) => {
+    .option(
+      "--allow-attestation-bypass",
+      "Accept attestation findings for this commission instead of rejecting them",
+    )
+    .action(async (slug: string | undefined, options: { allowAttestationBypass?: boolean }) => {
       const chosenSlug = slug || (await ask("Device slug: "));
       const setupCode = await ask("Temporary Matter setup code: ", true);
       const { data } = await adminRequest("POST", "/admin/devices/commission", {
         setupCode,
         slug: chosenSlug,
+        ...(options.allowAttestationBypass ? { allowAttestationBypass: true } : {}),
       });
       console.log(`Commissioned '${chosenSlug}':`);
       console.log(JSON.stringify(data, null, 2));
@@ -386,7 +391,15 @@ async function createProgram(): Promise<void> {
   config.command("set <name> <value>").action(async (name: string, value: string) => {
     const { data: current } = await adminRequest<Record<string, unknown>>("GET", "/admin/config");
     const numeric = ["apiPort", "adminPort"];
-    const parsed: unknown = numeric.includes(name) ? Number(value) : value;
+    const booleans = ["allowAttestationBypass"];
+    let parsed: unknown = value;
+    if (numeric.includes(name)) parsed = Number(value);
+    if (booleans.includes(name)) {
+      if (value !== "true" && value !== "false") {
+        throw new Error(`${name} must be true or false`);
+      }
+      parsed = value === "true";
+    }
     if (
       numeric.includes(name) &&
       (!Number.isInteger(parsed) || Number(parsed) < 1024 || Number(parsed) > 65535)

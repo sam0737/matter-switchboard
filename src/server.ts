@@ -22,6 +22,7 @@ export interface ServiceContext {
   inventory: Inventory;
   matter: MatterControllerAdapter;
   countryCode: string;
+  allowAttestationBypass: boolean;
 }
 
 export async function createServiceContext(): Promise<ServiceContext> {
@@ -31,8 +32,11 @@ export async function createServiceContext(): Promise<ServiceContext> {
   await store.load();
   return {
     inventory: new Inventory(store),
-    matter: new MatterControllerAdapter(),
+    matter: new MatterControllerAdapter({
+      allowAttestationBypass: config.allowAttestationBypass,
+    }),
     countryCode: config.matterCountryCode,
+    allowAttestationBypass: config.allowAttestationBypass,
   };
 }
 
@@ -305,7 +309,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
     },
   );
 
-  app.post<{ Body: { setupCode: string; slug: string } }>(
+  app.post<{ Body: { setupCode: string; slug: string; allowAttestationBypass?: boolean } }>(
     "/admin/devices/commission",
     {
       schema: {
@@ -315,7 +319,11 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
           type: "object",
           required: ["setupCode", "slug"],
           additionalProperties: false,
-          properties: { setupCode: { type: "string" }, slug: { type: "string" } },
+          properties: {
+            setupCode: { type: "string" },
+            slug: { type: "string" },
+            allowAttestationBypass: { type: "boolean" },
+          },
         },
       },
     },
@@ -328,6 +336,10 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         request.body.setupCode,
         request.body.slug,
         context.countryCode,
+        {
+          allowAttestationBypass:
+            request.body.allowAttestationBypass ?? context.allowAttestationBypass,
+        },
       );
       return reply.code(201).send(await context.inventory.addMatter(device));
     },
@@ -508,6 +520,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         "adminPort",
         "adminHost",
         "matterCountryCode",
+        "allowAttestationBypass",
       ]);
       if (Object.keys(request.body).some((key) => !allowed.has(key))) {
         throw new HttpError(400, "Unknown configuration setting", "invalid_config");

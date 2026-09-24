@@ -3,6 +3,8 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { decideAttestation } from "../../attestation.js";
+import { defaultConfig, validateConfig } from "../../config.js";
 import { Inventory } from "../../inventory.js";
 import { SlidingWindowLimiter } from "../../limiter.js";
 import { createSecret, matches, verifier } from "../../security.js";
@@ -81,6 +83,48 @@ test("API secrets are high entropy and stored verifiers do not expose them", () 
   assert.equal(matches(secret, verifier(secret)), true);
   assert.equal(matches(`${secret}x`, verifier(secret)), false);
   assert.notEqual(verifier(secret), secret);
+});
+
+test("attestation bypass defaults off and must be boolean", () => {
+  assert.equal(defaultConfig.allowAttestationBypass, false);
+  assert.equal(validateConfig({ ...defaultConfig }).allowAttestationBypass, false);
+  assert.equal(
+    validateConfig({ ...defaultConfig, allowAttestationBypass: true }).allowAttestationBypass,
+    true,
+  );
+  assert.throws(
+    () =>
+      validateConfig({
+        ...defaultConfig,
+        allowAttestationBypass: "true" as unknown as boolean,
+      }),
+    /allowAttestationBypass must be true or false/,
+  );
+});
+
+test("attestation accepts every finding below error", () => {
+  const note = {
+    level: "info" as const,
+    type: "PaaTrustStoreTimeMismatch",
+    message: "cannot confirm PAA was in DCL when DAC was issued",
+  };
+  const warning = {
+    level: "warning" as const,
+    type: "CdSignerVerificationSkipped",
+    message: "skipping CD signature verification",
+  };
+  assert.equal(decideAttestation([note, warning], false), true);
+  assert.equal(
+    decideAttestation(
+      [note, warning, { level: "error", type: "PaaNotTrusted", message: "PAA not found" }],
+      false,
+    ),
+    "PaaNotTrusted: PAA not found",
+  );
+  assert.equal(
+    decideAttestation([{ level: "error", type: "PaaNotTrusted", message: "no" }], true),
+    true,
+  );
 });
 
 test("sliding window rate limiter enforces limits and expires entries", () => {
