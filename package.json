@@ -27,7 +27,7 @@
   },
   "dependencies": {
     "@fastify/swagger": "^9.5.1",
-    "@fastify/swagger-ui": "^5.2.3",
+    "@fastify/swagger-ui": "^6.1.1",
     "@matter/main": "0.17.9",
     "@project-chip/matter.js": "0.17.9",
     "commander": "^14.0.0",
