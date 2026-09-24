@@ -11,6 +11,7 @@ import { deviceAllowlist, Inventory } from "../../inventory.js";
 import { SlidingWindowLimiter } from "../../limiter.js";
 import { applyLogLevel } from "../../log.js";
 import { createSecret, matches, verifier } from "../../security.js";
+import { shareTimeoutSeconds } from "../../share.js";
 import { StateStore } from "../../storage.js";
 
 test("mock inventory has two sockets and power state survives reload", async () => {
@@ -260,6 +261,15 @@ test("a fabric conflict restores the single unregistered commissioned node", () 
     () => unregisteredCommissionedNode(["10", "20"], []),
     /2 commissioned nodes are not in the inventory/,
   );
+});
+
+test("a sharing window is three to fifteen minutes", () => {
+  assert.equal(shareTimeoutSeconds(undefined), 180);
+  assert.equal(shareTimeoutSeconds("180"), 180);
+  assert.equal(shareTimeoutSeconds(900), 900);
+  assert.throws(() => shareTimeoutSeconds(179), /180 through 900/);
+  assert.throws(() => shareTimeoutSeconds("10"), /180 through 900/);
+  assert.throws(() => shareTimeoutSeconds(901), /180 through 900/);
 });
 
 test("sliding window rate limiter enforces limits and expires entries", () => {

@@ -1,7 +1,7 @@
 import path from "node:path";
 import { randomUUID } from "node:crypto";
 import { Environment } from "@matter/main";
-import { GeneralCommissioning } from "@matter/main/clusters";
+import { AdministratorCommissioning, GeneralCommissioning } from "@matter/main/clusters";
 import { ElectricalPowerMeasurementClient } from "@matter/main/behaviors/electrical-power-measurement";
 import { OnOffClient } from "@matter/main/behaviors/on-off";
 import { OperationalCredentialsClient } from "@matter/main/behaviors/operational-credentials";
@@ -17,6 +17,7 @@ import { unregisteredCommissionedNode } from "./commissioned.js";
 import { switchboardLog } from "./log.js";
 import type { DeviceRecord, OutletRecord } from "./model.js";
 import { files } from "./paths.js";
+import type { ShareWindow } from "./share.js";
 
 const timeout = <T>(promise: PromiseLike<T>, ms: number, label: string): Promise<T> =>
   Promise.race([
@@ -117,6 +118,31 @@ export class MatterControllerAdapter {
       nodeId = NodeId(BigInt(restored));
     }
     return this.#deviceRecord(slug, await this.#readyNode(nodeId));
+  }
+
+  /** Opens an enhanced commissioning window so another administrator can join this device. */
+  async share(device: DeviceRecord, timeoutSeconds: number): Promise<ShareWindow> {
+    const paired = await this.#paired(device);
+    let opened: { manualPairingCode: string; qrPairingCode: string };
+    try {
+      opened = await paired.openEnhancedCommissioningWindow(timeoutSeconds);
+    } catch (error) {
+      if (error instanceof AdministratorCommissioning.BusyError) {
+        throw new Error(
+          "The device already has a commissioning session in progress. Wait for it to finish, then share again",
+        );
+      }
+      throw error;
+    }
+    switchboardLog.info(
+      `Opened a multi-admin sharing window for '${device.slug}' (${timeoutSeconds}s)`,
+    );
+    return {
+      manualPairingCode: opened.manualPairingCode,
+      qrPairingCode: opened.qrPairingCode,
+      timeoutSeconds,
+      expiresAt: new Date(Date.now() + timeoutSeconds * 1000).toISOString(),
+    };
   }
 
   async power(device: DeviceRecord, endpointId: number, on: boolean): Promise<OutletRecord> {

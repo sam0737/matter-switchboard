@@ -3,6 +3,7 @@ import { loadConfig, normalizeLogLevel, readAdminToken } from "./config.js";
 import type { DeviceRecord, OutletRecord } from "./model.js";
 import { files } from "./paths.js";
 import { createSecret } from "./security.js";
+import type { ShareWindow } from "./share.js";
 
 export class AdminApiError extends Error {
   constructor(message: string) {
@@ -108,6 +109,15 @@ export async function commissionDevice(input: {
     slug: input.slug,
     ...(input.allowAttestationBypass ? { allowAttestationBypass: true } : {}),
   });
+  return data;
+}
+
+export async function shareDevice(slug: string, timeoutSeconds?: number): Promise<ShareWindow> {
+  const { data } = await adminRequest<ShareWindow>(
+    "POST",
+    `/admin/devices/${encodeURIComponent(slug)}/share`,
+    timeoutSeconds === undefined ? {} : { timeoutSeconds },
+  );
   return data;
 }
 

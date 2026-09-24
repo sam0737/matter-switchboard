@@ -20,6 +20,7 @@ import {
   removeFabric,
   removeMock,
   renameDevice,
+  shareDevice,
   deleteKey,
   rotateAdminCredential,
   type FabricRecord,
@@ -29,6 +30,12 @@ import { confirmedValue, fabricRemovalConfirmation, requiredArgument } from "./c
 import { deviceAllowlist } from "./inventory.js";
 import { files, ensureDirectories } from "./paths.js";
 import { startServer } from "./server.js";
+import {
+  SHARE_TIMEOUT_DEFAULT_SECONDS,
+  SHARE_TIMEOUT_MAX_SECONDS,
+  SHARE_TIMEOUT_MIN_SECONDS,
+  shareTimeoutSeconds,
+} from "./share.js";
 import { shouldLaunchTui } from "./tui/launch.js";
 
 const cliPath = fileURLToPath(import.meta.url);
@@ -290,6 +297,24 @@ async function createProgram(): Promise<void> {
         console.log(JSON.stringify(data, null, 2));
       },
     );
+  device
+    .command("share")
+    .description("Open a multi-admin sharing window on a commissioned strip")
+    .argument("[slug]", "device slug")
+    .option(
+      "--timeout <seconds>",
+      `Window length in seconds, from ${SHARE_TIMEOUT_MIN_SECONDS} through ${SHARE_TIMEOUT_MAX_SECONDS}`,
+      String(SHARE_TIMEOUT_DEFAULT_SECONDS),
+    )
+    .action(async (slug: string | undefined, options: { timeout?: string }) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
+      const timeoutSeconds = shareTimeoutSeconds(options.timeout);
+      const window = await shareDevice(chosen, timeoutSeconds);
+      console.log(
+        `Opened a sharing window for '${chosen}'. Give the manual pairing code to the other administrator before it expires.`,
+      );
+      console.log(JSON.stringify(window, null, 2));
+    });
   device
     .command("list")
     .description("List registered devices")

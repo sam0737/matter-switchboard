@@ -16,6 +16,7 @@ import {
 } from "./openapi.js";
 import { ensureDirectories } from "./paths.js";
 import { bearer, findApiKey, matches, verifier } from "./security.js";
+import { shareTimeoutSeconds } from "./share.js";
 import { StateStore } from "./storage.js";
 
 declare module "fastify" {
@@ -306,6 +307,23 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         },
       );
       return reply.code(201).send(await context.inventory.addMatter(device));
+    },
+  );
+
+  app.post<{ Params: { slug: string }; Body: { timeoutSeconds?: number } }>(
+    "/admin/devices/:slug/share",
+    { schema: schemas.share },
+    async (request) => {
+      const device = context.inventory.get(request.params.slug);
+      if (device.kind !== "matter") {
+        throw new HttpError(
+          409,
+          "Mock devices cannot be shared with another Matter administrator",
+          "wrong_device_kind",
+        );
+      }
+      const timeoutSeconds = shareTimeoutSeconds(request.body?.timeoutSeconds);
+      return context.matter.share(device, timeoutSeconds);
     },
   );
 

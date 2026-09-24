@@ -47,6 +47,7 @@ const adminPaths = [
   "/admin/devices/{slug}/forget-local",
   "/admin/devices/{slug}/ping",
   "/admin/devices/{slug}/rename",
+  "/admin/devices/{slug}/share",
   "/admin/keys",
   "/admin/keys/{name}",
   "/admin/mocks",
@@ -245,6 +246,21 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
     body: JSON.stringify({ on: true }),
   });
   assert.equal(adminPower.status, 200, await adminPower.text());
+  const shareMock = await fetch(`${adminBase}/admin/devices/test-strip/share`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({}),
+  });
+  assert.equal(shareMock.status, 409, await shareMock.text());
+  const shareTimeout = await fetch(`${adminBase}/admin/devices/test-strip/share`, {
+    method: "POST",
+    headers: adminHeaders,
+    body: JSON.stringify({ timeoutSeconds: 10 }),
+  });
+  assert.equal(shareTimeout.status, 400);
+  const shareCli = command(env, "device", "share", "test-strip");
+  assert.notEqual((await shareCli.exited).code, 0);
+  assert.match(shareCli.output(), /cannot be shared/);
 
   const makeKey = command(env, "key", "create", "e2e", "control", "test-strip");
   assert.equal((await makeKey.exited).code, 0, makeKey.output());

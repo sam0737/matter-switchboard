@@ -53,7 +53,9 @@ restart to acquire it normally.
 Matter strips are commissioned onto the server's fabric through Matter
 multi-admin sharing. The strip is already provisioned onto Wi-Fi by another
 commissioner. Switchboard uses the setup code from a temporary commissioning
-window and does not provision Wi-Fi credentials.
+window and does not provision Wi-Fi credentials. A strip Switchboard already
+administers can open the same kind of window, so another administrator can
+join it. That setup code is returned once and is not stored.
 
 ### Mock devices
 
@@ -79,8 +81,9 @@ must be on a network where Matter traffic can reach the strips.
 There are two HTTP API surfaces, hosted by separate listeners in the same
 process:
 
-1. **Administrator API** — device commissioning and removal, inventory
-   management, reachability checks, and API-key management. It also serves the
+1. **Administrator API** — device commissioning, multi-admin sharing, and
+   removal, inventory management, reachability checks, and API-key management.
+   It also serves the
    `/v1` device and outlet routes so the local CLI and TUI can read state and
    toggle sockets with the administrator credential. It listens on loopback and
    is used by the local CLI.
@@ -167,7 +170,7 @@ or requests cross a network boundary. Bind the API to the intended interface
 and use host/network firewall rules to restrict access.
 
 All device and fabric administration routes require administrator access. User
-keys cannot commission devices, rename devices, remove fabrics, or manage keys.
+keys cannot commission devices, share devices, rename devices, remove fabrics, or manage keys.
 Removing a fabric other than the Switchboard fabric requires an explicit
 confirmation step and displays the fabric label and vendor information before
 the operation.

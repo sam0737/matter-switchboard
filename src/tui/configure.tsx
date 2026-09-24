@@ -18,6 +18,7 @@ import {
   removeFabric,
   removeMock,
   renameDevice,
+  shareDevice,
   deleteKey,
   rotateAdminCredential,
 } from "../admin-api.js";
@@ -78,6 +79,7 @@ const groupItems: Record<Group, Array<{ id: string; label: string }>> = {
     { id: "list", label: "List" },
     { id: "show", label: "Show" },
     { id: "commission", label: "Commission" },
+    { id: "share", label: "Share" },
     { id: "rename", label: "Rename" },
     { id: "ping", label: "Ping" },
     { id: "endpoints", label: "Endpoints" },
@@ -232,6 +234,25 @@ export function Configure(props: { onBack: () => void }) {
             true,
           );
         });
+        return;
+      }
+      if (id === "share") {
+        pickDevice(
+          "Share device",
+          "devices",
+          (slug) => {
+            run("devices", `Share '${slug}'`, async () => {
+              const window = await shareDevice(slug);
+              return [
+                "Give this setup code to the other administrator before the window expires.",
+                "Opening another window replaces this code.",
+                "",
+                pretty(window),
+              ].join("\n");
+            });
+          },
+          (kind) => kind === "matter",
+        );
         return;
       }
       if (id === "rename") {

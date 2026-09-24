@@ -34,6 +34,8 @@ This listener also serves the \`/v1\` device and outlet routes. The CLI and TUI 
 
 Commission a strip that is already on Wi-Fi: open a Matter multi-admin sharing window, then \`POST /admin/devices/commission\` with the temporary setup code and a slug. The setup code expires with that window and is not the original pairing code.
 
+To let another administrator join a strip this server already controls, \`POST /admin/devices/{slug}/share\`. The response is a one-time setup code for that window. It is not stored.
+
 \`POST /admin/mocks\` adds a two-socket strip that persists power state and does not join a Matter fabric. Remove it with \`DELETE /admin/mocks/{slug}\`. For a commissioned device, decommission-self asks the device to drop this controller, and forget-local drops only the local pairing.
 
 Removing another fabric requires that fabric's current confirmation label. When the label is empty, confirm with the fabric index. List fabrics immediately before removal; indexes can change.
@@ -512,6 +514,33 @@ const powerResult: Schema = {
   },
 };
 
+const shareWindow: Schema = {
+  title: "ShareWindow",
+  type: "object",
+  additionalProperties: false,
+  required: ["manualPairingCode", "qrPairingCode", "timeoutSeconds", "expiresAt"],
+  properties: {
+    manualPairingCode: {
+      type: "string",
+      description:
+        "Temporary Matter manual pairing code. Enter it in the other administrator. It stops working when the window expires or another window is opened.",
+    },
+    qrPairingCode: {
+      type: "string",
+      description:
+        "Matter QR payload for the same window. Scan it from an administrator that accepts QR codes.",
+    },
+    timeoutSeconds: {
+      type: "integer",
+      description: "How long the device accepts a new administrator, in seconds.",
+    },
+    expiresAt: {
+      type: "string",
+      description: "UTC time when the window stops accepting a new administrator.",
+    },
+  },
+};
+
 const fabric: Schema = {
   title: "Fabric",
   type: "object",
@@ -898,6 +927,34 @@ export function createAdminSchemas() {
       errors: [400, 401, 409, 429],
       response: {
         201: json("The commissioned strip and the outlets discovered on it.", adminDevice),
+      },
+    }),
+    share: operation({
+      tags: ["devices"],
+      operationId: "shareDevice",
+      summary: "Share a strip with another administrator",
+      description:
+        "Opens an enhanced Matter commissioning window on a commissioned strip. The response contains a one-time manual pairing code and QR code for another administrator. The code is not stored. Opening a window replaces any commissioning window already open on the device. A mock strip is rejected. timeoutSeconds defaults to 180 and must be an integer from 180 through 900.",
+      params: slugParams,
+      body: {
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          timeoutSeconds: {
+            type: "integer",
+            minimum: 180,
+            maximum: 900,
+            description:
+              "How long the device accepts the new administrator, in seconds. Omit for 180. The allowed range is 180 through 900.",
+          },
+        },
+      },
+      errors: [400, 401, 404, 409, 429],
+      response: {
+        200: json(
+          "Temporary setup code for the other administrator. It is not stored and expires with the window.",
+          shareWindow,
+        ),
       },
     }),
     rename: operation({
