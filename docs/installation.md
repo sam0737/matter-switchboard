@@ -77,6 +77,21 @@ Use `matter-switchboard config show` to inspect non-secret settings and
 service after changing listener settings. The
 effective configuration and validation errors are printed at startup.
 
+### Logging
+
+`logLevel` sets the minimum severity written by the service and the Matter
+stack. The default is `info`, so info, notice, warn, error, and fatal messages
+are kept and debug messages are omitted. Use `debug` while diagnosing
+commissioning or network problems:
+
+```sh
+matter-switchboard config set logLevel debug
+```
+
+Accepted values are `debug`, `info`, `notice`, `warn`, `error`, and `fatal`.
+A running service applies the new level immediately. Configuration files that
+omit `logLevel` use `info`.
+
 Re-run `matter-switchboard init` only to create missing files. It does not
 reset commissioned Matter state or overwrite existing credentials. Use the
 explicit reset command only when intentionally discarding controller identity

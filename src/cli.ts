@@ -4,7 +4,7 @@ import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { initConfig, loadConfig, readAdminToken } from "./config.js";
+import { initConfig, loadConfig, logLevels, readAdminToken } from "./config.js";
 import { startServer } from "./server.js";
 import { files, ensureDirectories } from "./paths.js";
 import { createSecret } from "./security.js";
@@ -400,6 +400,13 @@ async function createProgram(): Promise<void> {
       }
       parsed = value === "true";
     }
+    if (name === "logLevel") {
+      const level = value.toLowerCase();
+      if (!(logLevels as readonly string[]).includes(level)) {
+        throw new Error("logLevel must be debug, info, notice, warn, error, or fatal");
+      }
+      parsed = level;
+    }
     if (
       numeric.includes(name) &&
       (!Number.isInteger(parsed) || Number(parsed) < 1024 || Number(parsed) > 65535)
@@ -410,9 +417,13 @@ async function createProgram(): Promise<void> {
       throw new Error(`Setting '${name}' cannot be changed`);
     const { data } = await adminRequest("PUT", "/admin/config", { ...current, [name]: parsed });
     console.log(JSON.stringify(data, null, 2));
-    console.log(
-      "Restart Matter Switchboard for listener or Matter-network changes to take effect.",
-    );
+    if (name === "logLevel") {
+      console.log("Log level applied to the running service.");
+    } else {
+      console.log(
+        "Restart Matter Switchboard for listener or Matter-network changes to take effect.",
+      );
+    }
   });
 
   program

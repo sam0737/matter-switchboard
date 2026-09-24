@@ -3,11 +3,13 @@ import { mkdtemp, rm } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 import test from "node:test";
+import { LogLevel, Logger } from "@matter/general";
 import { decideAttestation } from "../../attestation.js";
 import { unregisteredCommissionedNode } from "../../commissioned.js";
-import { defaultConfig, validateConfig } from "../../config.js";
+import { defaultConfig, validateConfig, type LogLevelName } from "../../config.js";
 import { Inventory } from "../../inventory.js";
 import { SlidingWindowLimiter } from "../../limiter.js";
+import { applyLogLevel } from "../../log.js";
 import { createSecret, matches, verifier } from "../../security.js";
 import { StateStore } from "../../storage.js";
 
@@ -101,6 +103,30 @@ test("attestation bypass defaults off and must be boolean", () => {
       }),
     /allowAttestationBypass must be true or false/,
   );
+});
+
+test("log level defaults to info and can be set to debug", () => {
+  assert.equal(defaultConfig.logLevel, "info");
+  assert.equal(validateConfig({ ...defaultConfig }).logLevel, "info");
+  assert.equal(
+    validateConfig({ ...defaultConfig, logLevel: "DEBUG" as LogLevelName }).logLevel,
+    "debug",
+  );
+  assert.equal(validateConfig({ ...defaultConfig, logLevel: "warn" }).logLevel, "warn");
+  assert.throws(
+    () => validateConfig({ ...defaultConfig, logLevel: "verbose" as LogLevelName }),
+    /logLevel must be debug, info, notice, warn, error, or fatal/,
+  );
+  const previous = Logger.level;
+  try {
+    applyLogLevel("info");
+    assert.equal(Logger.level, LogLevel.INFO);
+    applyLogLevel("debug");
+    assert.equal(Logger.level, LogLevel.DEBUG);
+    assert.ok(LogLevel.DEBUG < LogLevel.INFO);
+  } finally {
+    Logger.level = previous;
+  }
 });
 
 test("attestation accepts every finding below error", () => {

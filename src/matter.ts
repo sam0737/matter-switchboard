@@ -14,6 +14,7 @@ import { CommissioningController } from "@project-chip/matter.js";
 import type { PairedNode } from "@project-chip/matter.js/device";
 import { decideAttestation } from "./attestation.js";
 import { unregisteredCommissionedNode } from "./commissioned.js";
+import { switchboardLog } from "./log.js";
 import type { DeviceRecord, OutletRecord } from "./model.js";
 import { files } from "./paths.js";
 
@@ -74,7 +75,7 @@ export class MatterControllerAdapter {
   ): Promise<DeviceRecord> {
     const allowAttestationBypass = options.allowAttestationBypass ?? this.#allowAttestationBypass;
     if (allowAttestationBypass) {
-      console.warn(
+      switchboardLog.warn(
         "Commissioning with attestation bypass: findings will be accepted instead of rejected",
       );
     }
@@ -91,7 +92,9 @@ export class MatterControllerAdapter {
             const decision = decideAttestation(findings, allowAttestationBypass);
             if (decision === true) {
               for (const finding of findings) {
-                console.info(`Attestation note accepted: ${finding.type} ${finding.message}`);
+                switchboardLog.info(
+                  `Attestation note accepted: ${finding.type} ${finding.message}`,
+                );
               }
             }
             return decision;
@@ -108,7 +111,9 @@ export class MatterControllerAdapter {
         controller.getCommissionedNodes().map((id) => String(id)),
         options.registeredNodeIds ?? [],
       );
-      console.info(`Device is already on this fabric; registering existing node ${restored}`);
+      switchboardLog.info(
+        `Device is already on this fabric; registering existing node ${restored}`,
+      );
       nodeId = NodeId(BigInt(restored));
     }
     return this.#deviceRecord(slug, await this.#readyNode(nodeId));

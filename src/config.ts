@@ -2,6 +2,10 @@ import fs from "node:fs/promises";
 import { randomBytes } from "node:crypto";
 import { files, ensureDirectories } from "./paths.js";
 
+export const logLevels = ["debug", "info", "notice", "warn", "error", "fatal"] as const;
+
+export type LogLevelName = (typeof logLevels)[number];
+
 export interface SwitchboardConfig {
   apiHost: string;
   apiPort: number;
@@ -9,6 +13,7 @@ export interface SwitchboardConfig {
   adminPort: number;
   matterCountryCode: string;
   allowAttestationBypass: boolean;
+  logLevel: LogLevelName;
 }
 
 export const defaultConfig: SwitchboardConfig = {
@@ -18,7 +23,15 @@ export const defaultConfig: SwitchboardConfig = {
   adminPort: 8091,
   matterCountryCode: "CN",
   allowAttestationBypass: false,
+  logLevel: "info",
 };
+
+export function normalizeLogLevel(value: unknown): LogLevelName {
+  if (typeof value === "string" && (logLevels as readonly string[]).includes(value.toLowerCase())) {
+    return value.toLowerCase() as LogLevelName;
+  }
+  throw new Error("logLevel must be debug, info, notice, warn, error, or fatal");
+}
 
 export function validateConfig(config: SwitchboardConfig): SwitchboardConfig {
   if (
@@ -42,7 +55,7 @@ export function validateConfig(config: SwitchboardConfig): SwitchboardConfig {
   if (typeof config.allowAttestationBypass !== "boolean") {
     throw new Error("allowAttestationBypass must be true or false");
   }
-  return config;
+  return { ...config, logLevel: normalizeLogLevel(config.logLevel) };
 }
 
 export async function initConfig(): Promise<{ created: boolean; adminToken?: string }> {
@@ -86,12 +99,13 @@ export async function loadConfig(): Promise<SwitchboardConfig> {
   }
 }
 
-export async function saveConfig(config: SwitchboardConfig): Promise<void> {
-  validateConfig(config);
+export async function saveConfig(config: SwitchboardConfig): Promise<SwitchboardConfig> {
+  const valid = validateConfig(config);
   const temp = `${files.config}.${process.pid}.${randomBytes(4).toString("hex")}.tmp`;
-  await fs.writeFile(temp, `${JSON.stringify(config, null, 2)}\n`, { mode: 0o600, flag: "wx" });
+  await fs.writeFile(temp, `${JSON.stringify(valid, null, 2)}\n`, { mode: 0o600, flag: "wx" });
   await fs.rename(temp, files.config);
   await fs.chmod(files.config, 0o600);
+  return valid;
 }
 
 export async function readAdminToken(): Promise<string> {

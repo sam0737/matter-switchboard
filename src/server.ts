@@ -4,6 +4,7 @@ import swaggerUi from "@fastify/swagger-ui";
 import { randomBytes } from "node:crypto";
 import { loadConfig, readAdminToken, saveConfig } from "./config.js";
 import { HttpError } from "./errors.js";
+import { applyLogLevel } from "./log.js";
 import { Inventory, validateSlug } from "./inventory.js";
 import { SlidingWindowLimiter } from "./limiter.js";
 import { MatterControllerAdapter } from "./matter.js";
@@ -28,6 +29,7 @@ export interface ServiceContext {
 export async function createServiceContext(): Promise<ServiceContext> {
   await ensureDirectories();
   const config = await loadConfig();
+  applyLogLevel(config.logLevel);
   const store = new StateStore();
   await store.load();
   return {
@@ -530,13 +532,14 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
         "adminHost",
         "matterCountryCode",
         "allowAttestationBypass",
+        "logLevel",
       ]);
       if (Object.keys(request.body).some((key) => !allowed.has(key))) {
         throw new HttpError(400, "Unknown configuration setting", "invalid_config");
       }
-      const next = { ...old, ...request.body } as typeof old;
+      let next = { ...old, ...request.body } as typeof old;
       try {
-        await saveConfig(next);
+        next = await saveConfig(next);
       } catch (error) {
         throw new HttpError(
           400,
@@ -544,6 +547,7 @@ function registerAdminRoutes(app: FastifyInstance, context: ServiceContext): voi
           "invalid_config",
         );
       }
+      applyLogLevel(next.logLevel);
       return next;
     },
   );
