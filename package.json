@@ -1,6 +1,6 @@
 {
   "name": "matter-switchboard",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "A local Matter controller and HTTP power-switch API",
   "license": "MIT",
   "author": "sam0737",
