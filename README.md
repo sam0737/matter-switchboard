@@ -14,6 +14,8 @@ root installation, a database server, MQTT broker, or cloud account. Matter
 communication stays on the local network; the HTTP API is reached by the
 server's LAN IP.
 
+![Matter Switchboard controlling a strip from the terminal and HTTP API](docs/demo.webp)
+
 ## Quick start
 
 Requirements: Node.js 22 or newer, npm, and a Linux host on the same LAN as the
