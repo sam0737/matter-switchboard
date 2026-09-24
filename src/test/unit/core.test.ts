@@ -7,7 +7,7 @@ import { LogLevel, Logger } from "@matter/general";
 import { decideAttestation } from "../../attestation.js";
 import { unregisteredCommissionedNode } from "../../commissioned.js";
 import { defaultConfig, validateConfig, type LogLevelName } from "../../config.js";
-import { Inventory } from "../../inventory.js";
+import { deviceAllowlist, Inventory } from "../../inventory.js";
 import { SlidingWindowLimiter } from "../../limiter.js";
 import { applyLogLevel } from "../../log.js";
 import { createSecret, matches, verifier } from "../../security.js";
@@ -78,6 +78,19 @@ test("API device allowlists remain attached to identity across rename and slug r
   } finally {
     await rm(dir, { recursive: true, force: true });
   }
+});
+
+test("a blank device allowlist means every device", () => {
+  assert.deepEqual(deviceAllowlist(["patio-strip", "garage-strip"]), [
+    "patio-strip",
+    "garage-strip",
+  ]);
+  assert.deepEqual(deviceAllowlist(["patio-strip, garage-strip"]), ["patio-strip", "garage-strip"]);
+  assert.deepEqual(deviceAllowlist(["patio-strip garage-strip"]), ["patio-strip", "garage-strip"]);
+  assert.equal(deviceAllowlist(null), null);
+  assert.equal(deviceAllowlist([]), null);
+  assert.equal(deviceAllowlist([""]), null);
+  assert.equal(deviceAllowlist(["  ,  "]), null);
 });
 
 test("API secrets are high entropy and stored verifiers do not expose them", () => {

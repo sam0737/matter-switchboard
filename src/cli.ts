@@ -6,6 +6,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { initConfig, loadConfig, logLevels, readAdminToken } from "./config.js";
 import { startServer } from "./server.js";
+import { deviceAllowlist } from "./inventory.js";
 import { files, ensureDirectories } from "./paths.js";
 import { confirmedValue, fabricRemovalConfirmation, requiredArgument } from "./confirm.js";
 import { createSecret } from "./security.js";
@@ -436,29 +437,26 @@ async function createProgram(): Promise<void> {
     .description("Create a remote API key")
     .argument("[name]", "key name")
     .argument("[scope]", "read or control")
-    .argument("[devices]", "optional comma-separated device slug allowlist")
-    .action(
-      async (name: string | undefined, scope: string | undefined, devices: string | undefined) => {
-        const chosenName = await argument(name, "name", "Key name: ");
-        const chosenScope = await argument(scope, "scope", "Scope (read or control): ");
-        if (chosenScope !== "read" && chosenScope !== "control")
-          throw new Error("Scope must be read or control");
-        const allowlist = devices?.trim()
-          ? devices
-              .split(",")
-              .map((slug) => slug.trim())
-              .filter(Boolean)
-          : null;
-        const { data } = await adminRequest("POST", "/admin/keys", {
-          name: chosenName,
-          scope: chosenScope,
-          devices: allowlist,
-        });
-        console.log("Copy this key now; it is shown only once:");
-        console.log((data as { token: string }).token);
-        console.log(JSON.stringify({ ...(data as object), token: "[shown above]" }, null, 2));
-      },
-    );
+    .argument("[devices...]", "device slugs; omit for all devices")
+    .action(async (name: string | undefined, scope: string | undefined, devices: string[]) => {
+      const chosenName = await argument(name, "name", "Key name: ");
+      const chosenScope = await argument(scope, "scope", "Scope (read or control): ");
+      if (chosenScope !== "read" && chosenScope !== "control")
+        throw new Error("Scope must be read or control");
+      let deviceArgs = devices;
+      if (deviceArgs.length === 0 && process.stdin.isTTY) {
+        deviceArgs = [await ask("Devices (space or comma separated, empty for all): ")];
+      }
+      const allowlist = deviceAllowlist(deviceArgs);
+      const { data } = await adminRequest("POST", "/admin/keys", {
+        name: chosenName,
+        scope: chosenScope,
+        ...(allowlist ? { devices: allowlist } : {}),
+      });
+      console.log("Copy this key now; it is shown only once:");
+      console.log((data as { token: string }).token);
+      console.log(JSON.stringify({ ...(data as object), token: "[shown above]" }, null, 2));
+    });
   key.command("list").action(async () => {
     const { data } = await adminRequest("GET", "/admin/keys");
     console.log(JSON.stringify(data, null, 2));

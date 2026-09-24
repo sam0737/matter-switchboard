@@ -133,15 +133,15 @@ removing one. The target device must be reachable.
 ### Manage API keys
 
 ```sh
-matter-switchboard key create automation-a control patio-strip
+matter-switchboard key create automation-a control patio-strip garage-strip
 matter-switchboard key create dashboard read
 matter-switchboard key list
 matter-switchboard key revoke <key-id>
 ```
 
-On a terminal, omit the name or scope to be prompted. The device list is an
-optional third argument; separate slugs with commas. Omit it to leave the key
-unrestricted.
+On a terminal, omit the name, scope, or devices to be prompted. Leave the
+device prompt empty, or omit device arguments in a script, to allow every
+device. Separate multiple slugs with spaces or commas.
 
 The plaintext key is shown only when created. Store it in the calling
 application's secret store. `read` keys can list devices/endpoints and read

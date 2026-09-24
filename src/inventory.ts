@@ -10,6 +10,12 @@ export function validateSlug(value: string): void {
   }
 }
 
+/** Blank input means every device. Commas and whitespace separate slugs. */
+export function deviceAllowlist(values: readonly string[] | null | undefined): string[] | null {
+  const slugs = (values ?? []).flatMap((value) => value.split(/[\s,]+/)).filter(Boolean);
+  return slugs.length > 0 ? slugs : null;
+}
+
 function newOutlet(endpointId: number, name: string): OutletRecord {
   return {
     endpointId,
@@ -144,9 +150,10 @@ export class Inventory {
     devices: string[] | null;
     verifier: string;
   }) {
+    const slugs = deviceAllowlist(input.devices);
     return this.store.update((state) => {
       const deviceIds =
-        input.devices?.map((slug) => {
+        slugs?.map((slug) => {
           const device = state.devices.find((item) => item.slug === slug);
           if (!device) throw new Error(`Device '${slug}' was not found`);
           return device.id;
@@ -165,7 +172,7 @@ export class Inventory {
         id: key.id,
         name: key.name,
         scope: key.scope,
-        devices: input.devices,
+        devices: slugs,
         createdAt: key.createdAt,
       };
     });

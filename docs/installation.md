@@ -132,7 +132,8 @@ matter-switchboard key revoke <key-id>
 
 The full key is printed only on creation. Copy it to the calling program's
 secret store. The service stores only a verifier and metadata. Keys can be
-limited to `read` or `control` and to a list of device slugs. Revocation is
+limited to `read` or `control` and to a list of device slugs. Omit the device
+list to allow every device. Revocation is
 immediate. Keys must not be committed to source control or passed in a URL.
 
 The local CLI uses the separate administrator credential stored under the
