@@ -566,7 +566,11 @@ export function Configure(props: { onBack: () => void }) {
         items={homeItems}
         onSelect={onHomeSelect}
         onBack={props.onBack}
-        hint="arrows move   enter select   esc dashboard"
+        hint={[
+          { key: "arrows", action: "move" },
+          { key: "enter", action: "select" },
+          { key: "esc", action: "dashboard", color: "yellow" },
+        ]}
       />
     );
   }

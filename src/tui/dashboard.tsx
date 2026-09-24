@@ -1,5 +1,6 @@
 import { Box, Text, useApp, useInput } from "ink";
 import { formatNumber } from "./format.js";
+import { KeyHints } from "./hint.js";
 import { flattenSockets, type TuiState } from "./model.js";
 
 export function Dashboard(props: {
@@ -79,9 +80,13 @@ export function Dashboard(props: {
           </Box>
         );
       })}
-      <Box marginTop={1}>
-        <Text dimColor>enter toggle c configure q quit</Text>
-      </Box>
+      <KeyHints
+        items={[
+          { key: "enter", action: "toggle" },
+          { key: "c", action: "configure" },
+          { key: "q", action: "quit", color: "yellow" },
+        ]}
+      />
     </Box>
   );
 }
