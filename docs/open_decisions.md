@@ -60,8 +60,9 @@ Document host firewall rules as part of deployment.
 **Question:** Should commissioning require a caller-supplied slug, or generate
 one from vendor/product plus a short suffix and allow rename afterward?
 
-**Default:** Generate a collision-resistant initial slug and require the user
-to confirm or rename it before relying on it in automation.
+**Default:** Commissioning requires a caller-supplied slug. On a terminal the
+CLI prompts when it is omitted. Rename remains available afterward.
+Generating a slug from vendor and product is not implemented.
 
 ## Metering data support
 
@@ -75,12 +76,13 @@ actually exposes over Matter before making them part of a compatibility promise.
 
 ## Fabric-removal confirmation
 
-**Question:** Is an exact fabric-label confirmation plus `--yes` acceptable for
-non-interactive removal of another fabric?
+**Question:** Is an exact fabric-label flag acceptable for non-interactive
+removal of another fabric?
 
-**Default:** Yes, while interactive use displays the fabric label and available
-vendor information. Fabric removal can revoke another admin's access and must
-not be exposed to user API keys.
+**Default:** Yes. Interactive use displays the fabric label and available
+vendor information and asks for the label. A non-terminal session requires
+`--confirm-fabric-label` and exits instead of waiting. Fabric removal can
+revoke another admin's access and must not be exposed to user API keys.
 
 ## Controller storage backup and restore
 

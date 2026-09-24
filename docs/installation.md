@@ -125,7 +125,7 @@ is used.
 Create one scoped key per remote program:
 
 ```sh
-matter-switchboard key create --name irrigation --scope control --devices patio-strip
+matter-switchboard key create irrigation control patio-strip
 matter-switchboard key list
 matter-switchboard key revoke <key-id>
 ```

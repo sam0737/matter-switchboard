@@ -33,12 +33,12 @@ CLI reads the administrator credential from that file automatically.
 Leave the server running and open a second terminal for management commands.
 From an existing Matter administrator such as Home Assistant, open a sharing
 window for a strip. Then run `matter-switchboard device commission` and enter
-the new setup code. The strip must already be on Wi-Fi.
+the device slug and the new setup code. The strip must already be on Wi-Fi.
 
 Create an API key for a program and limit it to the device(s) it needs:
 
 ```sh
-matter-switchboard key create --name irrigation --devices patio-strip
+matter-switchboard key create irrigation control patio-strip
 ```
 
 The key is shown once. A program uses it in the HTTP `Authorization` header:

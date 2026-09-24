@@ -7,7 +7,7 @@ import { fileURLToPath } from "node:url";
 import { initConfig, loadConfig, logLevels, readAdminToken } from "./config.js";
 import { startServer } from "./server.js";
 import { files, ensureDirectories } from "./paths.js";
-import { fabricRemovalConfirmation } from "./confirm.js";
+import { confirmedValue, fabricRemovalConfirmation, requiredArgument } from "./confirm.js";
 import { createSecret } from "./security.js";
 
 const cliPath = fileURLToPath(import.meta.url);
@@ -152,6 +152,44 @@ async function ask(prompt: string, hidden = false): Promise<string> {
   });
 }
 
+async function argument(
+  value: string | undefined,
+  name: string,
+  prompt: string,
+  hidden = false,
+): Promise<string> {
+  return requiredArgument({
+    provided: value,
+    isTTY: Boolean(process.stdin.isTTY),
+    name,
+    read: () => ask(prompt, hidden),
+  });
+}
+
+async function confirmTypedSlug(slug: string, prompt: string, mismatch: string): Promise<void> {
+  if (!process.stdin.isTTY) return;
+  const entered = await ask(prompt);
+  if (entered !== slug) throw new Error(mismatch);
+}
+
+async function confirm(input: {
+  provided: string | undefined;
+  flag: string;
+  prompt: string;
+  hidden?: boolean;
+  expected?: string;
+  mismatch: string;
+}): Promise<string> {
+  return confirmedValue({
+    provided: input.provided,
+    isTTY: Boolean(process.stdin.isTTY),
+    flag: input.flag,
+    mismatch: input.mismatch,
+    read: () => ask(input.prompt, input.hidden ?? false),
+    ...(input.expected === undefined ? {} : { expected: input.expected }),
+  });
+}
+
 async function init(): Promise<void> {
   const result = await initConfig();
   if (result.created) {
@@ -196,10 +234,12 @@ async function createProgram(): Promise<void> {
 
   const mock = program.command("mock").description("Manage persistent two-socket mock strips");
   mock
-    .command("add <slug>")
+    .command("add")
     .description("Add a production-capable mock strip")
-    .action(async (slug: string) => {
-      const { data } = await adminRequest("POST", "/admin/mocks", { slug });
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
+      const { data } = await adminRequest("POST", "/admin/mocks", { slug: chosen });
       console.log(JSON.stringify(data, null, 2));
     });
   mock
@@ -210,32 +250,42 @@ async function createProgram(): Promise<void> {
       deviceRows(data.filter((item) => item.kind === "mock"));
     });
   mock
-    .command("remove <slug>")
+    .command("remove")
     .description("Remove a mock strip and its saved state")
-    .action(async (slug: string) => {
-      await adminRequest("DELETE", `/admin/mocks/${encodeURIComponent(slug)}`);
-      console.log(`Removed mock '${slug}'.`);
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
+      await adminRequest("DELETE", `/admin/mocks/${encodeURIComponent(chosen)}`);
+      console.log(`Removed mock '${chosen}'.`);
     });
 
   const device = program.command("device").description("Manage Matter devices");
   device
-    .command("commission [slug]")
+    .command("commission")
     .description("Commission a strip using a multi-admin setup code")
+    .argument("[slug]", "device slug")
+    .argument("[setup-code]", "temporary Matter setup code")
     .option(
       "--allow-attestation-bypass",
       "Accept attestation findings for this commission instead of rejecting them",
     )
-    .action(async (slug: string | undefined, options: { allowAttestationBypass?: boolean }) => {
-      const chosenSlug = slug || (await ask("Device slug: "));
-      const setupCode = await ask("Temporary Matter setup code: ", true);
-      const { data } = await adminRequest("POST", "/admin/devices/commission", {
-        setupCode,
-        slug: chosenSlug,
-        ...(options.allowAttestationBypass ? { allowAttestationBypass: true } : {}),
-      });
-      console.log(`Commissioned '${chosenSlug}':`);
-      console.log(JSON.stringify(data, null, 2));
-    });
+    .action(
+      async (
+        slug: string | undefined,
+        setupCode: string | undefined,
+        options: { allowAttestationBypass?: boolean },
+      ) => {
+        const chosenSlug = await argument(slug, "slug", "Device slug: ");
+        const code = await argument(setupCode, "setup-code", "Temporary Matter setup code: ", true);
+        const { data } = await adminRequest("POST", "/admin/devices/commission", {
+          setupCode: code,
+          slug: chosenSlug,
+          ...(options.allowAttestationBypass ? { allowAttestationBypass: true } : {}),
+        });
+        console.log(`Commissioned '${chosenSlug}':`);
+        console.log(JSON.stringify(data, null, 2));
+      },
+    );
   device
     .command("list")
     .description("List registered devices")
@@ -244,192 +294,237 @@ async function createProgram(): Promise<void> {
       deviceRows(data);
     });
   device
-    .command("show <slug>")
+    .command("show")
     .description("Show device and outlet information")
-    .action(async (slug: string) => {
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
       const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      const found = data.find((item) => item.slug === slug);
-      if (!found) throw new Error(`Device '${slug}' was not found`);
+      const found = data.find((item) => item.slug === chosen);
+      if (!found) throw new Error(`Device '${chosen}' was not found`);
       console.log(JSON.stringify(found, null, 2));
     });
   device
-    .command("rename <slug> <newSlug>")
+    .command("rename")
     .description("Change a device's API slug")
-    .action(async (slug: string, newSlug: string) => {
+    .argument("[slug]", "current device slug")
+    .argument("[new-slug]", "new device slug")
+    .action(async (slug: string | undefined, newSlug: string | undefined) => {
+      const current = await argument(slug, "slug", "Device slug: ");
+      const next = await argument(newSlug, "new-slug", "New device slug: ");
       const { data } = await adminRequest(
         "POST",
-        `/admin/devices/${encodeURIComponent(slug)}/rename`,
-        { slug: newSlug },
+        `/admin/devices/${encodeURIComponent(current)}/rename`,
+        { slug: next },
       );
       console.log(JSON.stringify(data, null, 2));
     });
   device
-    .command("ping <slug>")
+    .command("ping")
     .description("Check Matter reachability")
-    .action(async (slug: string) => {
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
       const { data } = await adminRequest(
         "POST",
-        `/admin/devices/${encodeURIComponent(slug)}/ping`,
+        `/admin/devices/${encodeURIComponent(chosen)}/ping`,
       );
       console.log(JSON.stringify(data, null, 2));
     });
   device
-    .command("decommission-self <slug>")
+    .command("decommission-self")
     .description("Remove the Switchboard fabric from a reachable strip")
-    .action(async (slug: string) => {
-      const confirmation = await ask(
-        `Remove the Matter Switchboard fabric from '${slug}'? Type '${slug}': `,
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
+      await confirmTypedSlug(
+        chosen,
+        `Remove the Matter Switchboard fabric from '${chosen}'? Type '${chosen}': `,
+        "Confirmation did not match; device was not changed",
       );
-      if (confirmation !== slug)
-        throw new Error("Confirmation did not match; device was not changed");
-      await adminRequest("DELETE", `/admin/devices/${encodeURIComponent(slug)}/decommission-self`);
-      console.log(`Decommissioned '${slug}' from the Switchboard fabric.`);
+      await adminRequest(
+        "DELETE",
+        `/admin/devices/${encodeURIComponent(chosen)}/decommission-self`,
+      );
+      console.log(`Decommissioned '${chosen}' from the Switchboard fabric.`);
     });
   device
-    .command("forget-local <slug>")
+    .command("forget-local")
     .description("Forget a device locally without removing its device fabric")
-    .action(async (slug: string) => {
-      const confirmation = await ask(
-        `Forget '${slug}' locally? The Matter fabric may remain on the device. Type '${slug}': `,
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
+      await confirmTypedSlug(
+        chosen,
+        `Forget '${chosen}' locally? The Matter fabric may remain on the device. Type '${chosen}': `,
+        "Confirmation did not match; local state was not changed",
       );
-      if (confirmation !== slug)
-        throw new Error("Confirmation did not match; local state was not changed");
-      await adminRequest("DELETE", `/admin/devices/${encodeURIComponent(slug)}/forget-local`);
-      console.log(`Forgot '${slug}' locally. The device may still hold this Matter fabric.`);
+      await adminRequest("DELETE", `/admin/devices/${encodeURIComponent(chosen)}/forget-local`);
+      console.log(`Forgot '${chosen}' locally. The device may still hold this Matter fabric.`);
     });
   device
-    .command("endpoints <slug>")
+    .command("endpoints")
     .description("List endpoint identifiers")
-    .action(async (slug: string) => {
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
       const { data } = await adminRequest<Array<Record<string, unknown>>>("GET", "/admin/devices");
-      const found = data.find((item) => item.slug === slug);
-      if (!found) throw new Error(`Device '${slug}' was not found`);
+      const found = data.find((item) => item.slug === chosen);
+      if (!found) throw new Error(`Device '${chosen}' was not found`);
       console.log(JSON.stringify(found.endpoints, null, 2));
     });
 
   const fabric = program.command("fabric").description("Inspect and remove Matter fabrics");
   fabric
-    .command("list <slug>")
+    .command("list")
     .description("List fabrics reported by a Matter device")
-    .action(async (slug: string) => {
+    .argument("[slug]", "device slug")
+    .action(async (slug: string | undefined) => {
+      const chosen = await argument(slug, "slug", "Device slug: ");
       const { data } = await adminRequest(
         "GET",
-        `/admin/devices/${encodeURIComponent(slug)}/fabrics`,
+        `/admin/devices/${encodeURIComponent(chosen)}/fabrics`,
       );
       console.log(JSON.stringify(data, null, 2));
     });
   fabric
-    .command("remove <slug> <fabricIndex>")
+    .command("remove")
     .description("Remove another fabric after explicit label confirmation")
-    .option("--yes", "Confirm after typing the exact fabric label")
+    .argument("[slug]", "device slug")
+    .argument("[fabric-index]", "fabric index")
     .option(
       "--confirm-fabric-label <label>",
       "Exact fabric label, or the fabric index when the label is empty",
     )
     .action(
       async (
-        slug: string,
-        fabricIndex: string,
-        options: { yes?: boolean; confirmFabricLabel?: string },
+        slug: string | undefined,
+        fabricIndex: string | undefined,
+        options: { confirmFabricLabel?: string },
       ) => {
+        const chosen = await argument(slug, "slug", "Device slug: ");
+        const index = await argument(fabricIndex, "fabric-index", "Fabric index: ");
         const { data: fabrics } = await adminRequest<
           Array<{ fabricIndex: number; label: string; vendorId: number }>
-        >("GET", `/admin/devices/${encodeURIComponent(slug)}/fabrics`);
-        const target = fabrics.find((item) => item.fabricIndex === Number(fabricIndex));
-        if (!target) throw new Error(`Fabric index ${fabricIndex} was not found`);
+        >("GET", `/admin/devices/${encodeURIComponent(chosen)}/fabrics`);
+        const target = fabrics.find((item) => item.fabricIndex === Number(index));
+        if (!target) throw new Error(`Fabric index ${index} was not found`);
         const expected = fabricRemovalConfirmation(target);
         const prompt =
           target.label.length > 0
             ? `Target fabric '${target.label}' (vendor ${target.vendorId}). Type the exact label to remove it: `
             : `Target fabric has no label (index ${target.fabricIndex}, vendor ${target.vendorId}). Type ${expected} to remove it: `;
-        const entered = options.confirmFabricLabel ?? (await ask(prompt));
-        if (entered !== expected)
-          throw new Error("Confirmation did not match; fabric was not removed");
-        if (options.confirmFabricLabel && !options.yes)
-          throw new Error("Non-interactive removal also requires --yes");
+        const entered = await confirm({
+          provided: options.confirmFabricLabel,
+          flag: "--confirm-fabric-label",
+          prompt,
+          expected,
+          mismatch: "Confirmation did not match; fabric was not removed",
+        });
         await adminRequest(
           "DELETE",
-          `/admin/devices/${encodeURIComponent(slug)}/fabrics/${fabricIndex}`,
+          `/admin/devices/${encodeURIComponent(chosen)}/fabrics/${index}`,
           { confirmLabel: entered },
         );
-        console.log(`Removed fabric ${fabricIndex} from '${slug}'.`);
+        console.log(`Removed fabric ${index} from '${chosen}'.`);
       },
     );
 
   const key = program.command("key").description("Create and revoke remote API keys");
   key
     .command("create")
-    .requiredOption("--name <name>")
-    .requiredOption("--scope <scope>", "read or control")
-    .option("--devices <slugs>", "comma-separated device slug allowlist")
-    .action(async (options: { name: string; scope: string; devices?: string }) => {
-      if (options.scope !== "read" && options.scope !== "control")
-        throw new Error("Scope must be read or control");
-      const devices =
-        options.devices
-          ?.split(",")
-          .map((slug) => slug.trim())
-          .filter(Boolean) ?? null;
-      const { data } = await adminRequest("POST", "/admin/keys", {
-        name: options.name,
-        scope: options.scope,
-        devices,
-      });
-      console.log("Copy this key now; it is shown only once:");
-      console.log((data as { token: string }).token);
-      console.log(JSON.stringify({ ...(data as object), token: "[shown above]" }, null, 2));
-    });
+    .description("Create a remote API key")
+    .argument("[name]", "key name")
+    .argument("[scope]", "read or control")
+    .argument("[devices]", "optional comma-separated device slug allowlist")
+    .action(
+      async (name: string | undefined, scope: string | undefined, devices: string | undefined) => {
+        const chosenName = await argument(name, "name", "Key name: ");
+        const chosenScope = await argument(scope, "scope", "Scope (read or control): ");
+        if (chosenScope !== "read" && chosenScope !== "control")
+          throw new Error("Scope must be read or control");
+        const allowlist = devices?.trim()
+          ? devices
+              .split(",")
+              .map((slug) => slug.trim())
+              .filter(Boolean)
+          : null;
+        const { data } = await adminRequest("POST", "/admin/keys", {
+          name: chosenName,
+          scope: chosenScope,
+          devices: allowlist,
+        });
+        console.log("Copy this key now; it is shown only once:");
+        console.log((data as { token: string }).token);
+        console.log(JSON.stringify({ ...(data as object), token: "[shown above]" }, null, 2));
+      },
+    );
   key.command("list").action(async () => {
     const { data } = await adminRequest("GET", "/admin/keys");
     console.log(JSON.stringify(data, null, 2));
   });
-  key.command("revoke <keyId>").action(async (keyId: string) => {
-    await adminRequest("DELETE", `/admin/keys/${encodeURIComponent(keyId)}`);
-    console.log(`Revoked key '${keyId}'.`);
-  });
+  key
+    .command("revoke")
+    .description("Revoke a remote API key")
+    .argument("[key-id]", "key id")
+    .action(async (keyId: string | undefined) => {
+      const chosen = await argument(keyId, "key-id", "Key id: ");
+      await adminRequest("DELETE", `/admin/keys/${encodeURIComponent(chosen)}`);
+      console.log(`Revoked key '${chosen}'.`);
+    });
 
   const config = program.command("config").description("Inspect or update service settings");
   config.command("show").action(async () => {
     const { data } = await adminRequest("GET", "/admin/config");
     console.log(JSON.stringify(data, null, 2));
   });
-  config.command("set <name> <value>").action(async (name: string, value: string) => {
-    const { data: current } = await adminRequest<Record<string, unknown>>("GET", "/admin/config");
-    const numeric = ["apiPort", "adminPort"];
-    const booleans = ["allowAttestationBypass"];
-    let parsed: unknown = value;
-    if (numeric.includes(name)) parsed = Number(value);
-    if (booleans.includes(name)) {
-      if (value !== "true" && value !== "false") {
-        throw new Error(`${name} must be true or false`);
+  config
+    .command("set")
+    .description("Update one service setting")
+    .argument("[name]", "setting name")
+    .argument("[value]", "setting value")
+    .action(async (name: string | undefined, value: string | undefined) => {
+      const setting = await argument(name, "name", "Setting name: ");
+      const raw = await argument(value, "value", "Setting value: ");
+      const { data: current } = await adminRequest<Record<string, unknown>>("GET", "/admin/config");
+      const numeric = ["apiPort", "adminPort"];
+      const booleans = ["allowAttestationBypass"];
+      let parsed: unknown = raw;
+      if (numeric.includes(setting)) parsed = Number(raw);
+      if (booleans.includes(setting)) {
+        if (raw !== "true" && raw !== "false") {
+          throw new Error(`${setting} must be true or false`);
+        }
+        parsed = raw === "true";
       }
-      parsed = value === "true";
-    }
-    if (name === "logLevel") {
-      const level = value.toLowerCase();
-      if (!(logLevels as readonly string[]).includes(level)) {
-        throw new Error("logLevel must be debug, info, notice, warn, error, or fatal");
+      if (setting === "logLevel") {
+        const level = raw.toLowerCase();
+        if (!(logLevels as readonly string[]).includes(level)) {
+          throw new Error("logLevel must be debug, info, notice, warn, error, or fatal");
+        }
+        parsed = level;
       }
-      parsed = level;
-    }
-    if (
-      numeric.includes(name) &&
-      (!Number.isInteger(parsed) || Number(parsed) < 1024 || Number(parsed) > 65535)
-    ) {
-      throw new Error(`${name} must be an integer from 1024 through 65535`);
-    }
-    if (!(name in current) || name === "adminHost")
-      throw new Error(`Setting '${name}' cannot be changed`);
-    const { data } = await adminRequest("PUT", "/admin/config", { ...current, [name]: parsed });
-    console.log(JSON.stringify(data, null, 2));
-    if (name === "logLevel") {
-      console.log("Log level applied to the running service.");
-    } else {
-      console.log(
-        "Restart Matter Switchboard for listener or Matter-network changes to take effect.",
-      );
-    }
-  });
+      if (
+        numeric.includes(setting) &&
+        (!Number.isInteger(parsed) || Number(parsed) < 1024 || Number(parsed) > 65535)
+      ) {
+        throw new Error(`${setting} must be an integer from 1024 through 65535`);
+      }
+      if (!(setting in current) || setting === "adminHost")
+        throw new Error(`Setting '${setting}' cannot be changed`);
+      const { data } = await adminRequest("PUT", "/admin/config", {
+        ...current,
+        [setting]: parsed,
+      });
+      console.log(JSON.stringify(data, null, 2));
+      if (setting === "logLevel") {
+        console.log("Log level applied to the running service.");
+      } else {
+        console.log(
+          "Restart Matter Switchboard for listener or Matter-network changes to take effect.",
+        );
+      }
+    });
 
   program
     .command("admin-credential")

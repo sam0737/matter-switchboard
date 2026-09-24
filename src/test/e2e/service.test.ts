@@ -94,17 +94,7 @@ test("CLI, authenticated HTTP API, mocks, persistence, and single-instance behav
   assert.equal((await add.exited).code, 0, add.output());
   assert.match(add.output(), /Two Socket Mock Strip/);
 
-  const makeKey = command(
-    env,
-    "key",
-    "create",
-    "--name",
-    "e2e",
-    "--scope",
-    "control",
-    "--devices",
-    "test-strip",
-  );
+  const makeKey = command(env, "key", "create", "e2e", "control", "test-strip");
   assert.equal((await makeKey.exited).code, 0, makeKey.output());
   const token = makeKey.output().match(/msb_[A-Za-z0-9_-]{40,}/)?.[0];
   assert.ok(token, makeKey.output());
